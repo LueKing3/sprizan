@@ -1,0 +1,259 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#07090b" />
+  <meta name="description" content="SPRIZAN — 100% free explainable cyber threat intelligence and URL reputation investigation console." />
+  <title>SPRIZAN — Cyber Threat Intelligence Console</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,400;0,500;1,400&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <!-- Ambient lighting orbs and animated background tech grid -->
+  <div class="ambient ambient-a"></div>
+  <div class="ambient ambient-b"></div>
+  <div class="bg-grid-overlay"></div>
+
+  <div class="app-shell">
+    <aside class="sidebar">
+      <a class="brand" href="#top" aria-label="SPRIZAN home">
+        <div class="brand-mark">
+          <svg viewBox="0 0 100 100" aria-hidden="true">
+            <path d="M15 57c2-23 19-39 43-42l-9 14 22-7-9 15c14 4 23 15 25 29l-17-7 6 19-20-10-7 17-10-20-19 7 8-18z"/>
+            <path d="M43 47l13-4-7 12z" class="eye"/>
+            <path d="M18 61l-9 10 18-3M68 31l17-12-7 20"/>
+          </svg>
+        </div>
+        <span class="brand-name">SPRIZAN<small>THREAT INTELLIGENCE</small></span>
+      </a>
+      <div class="nav-label">OPERATIONS WORKSPACE</div>
+      <nav class="nav">
+        <button class="nav-item active" data-view="overview"><span class="nav-icon">◈</span> Command Center</button>
+        <button class="nav-item" data-view="scanner"><span class="nav-icon">⌁</span> URL Intelligence</button>
+        <button class="nav-item" data-view="history"><span class="nav-icon">◷</span> Investigation Log</button>
+        <button class="nav-item" data-view="sources"><span class="nav-icon">◎</span> Intelligence Sources</button>
+      </nav>
+      <div class="sidebar-bottom">
+        <div class="system-card">
+          <span class="pulse-dot"></span>
+          <div>
+            <b>ENGINE STATUS</b>
+            <small id="engine-status">Checking engine telemetry…</small>
+          </div>
+        </div>
+        <div class="sidebar-dragon">DRAGON PROTOCOL <span>ACTIVE</span></div>
+        <div class="version">SPRIZAN CORE <span>v2.0 (FREE)</span></div>
+      </div>
+    </aside>
+
+    <main class="main" id="top">
+      <header class="topbar">
+        <div>
+          <div class="eyebrow">TACTICAL OPERATIONS / <span id="crumb">OVERVIEW</span></div>
+          <h1 id="page-title">Command Center</h1>
+        </div>
+        <div class="top-actions">
+          <div class="live-status"><span class="pulse-dot"></span> SYSTEM ONLINE · ZERO-BILLING</div>
+          <div class="avatar" title="Security Analyst">S</div>
+        </div>
+      </header>
+
+      <!-- View 1: Overview -->
+      <section class="view active" id="view-overview">
+        <div class="hero-panel">
+          <div class="hero-copy">
+            <div class="eyebrow red-text">◉ EXPLAINABLE THREAT INTELLIGENCE</div>
+            <h2>See the threat.<br><span>Understand the risk.</span></h2>
+            <p>Investigate suspicious URLs with explainable local structural analysis, verified top-domain recognition, and free community threat intelligence. 100% free with zero billing.</p>
+            <button class="primary-btn" data-go="scanner">INITIALISE SCANNER <span>↗</span></button>
+          </div>
+          <div class="hero-dragon">
+            <div class="dragon-glow-ring"></div>
+            <div class="dragon-orbit orbit-one"></div>
+            <div class="dragon-orbit orbit-two"></div>
+            <img src="./sprizan-dragon.png" alt="SPRIZAN Protective Dragon Artwork" />
+            <div class="dragon-caption">PROTECTIVE INTELLIGENCE <span>◈</span></div>
+          </div>
+          <div class="hero-grid"></div>
+        </div>
+
+        <div class="section-heading">
+          <div>
+            <div class="eyebrow">LIVE TELEMETRY</div>
+            <h3>Intelligence overview</h3>
+          </div>
+          <span class="muted mono" id="current-time">--:--:-- UTC</span>
+        </div>
+
+        <div class="metrics-grid">
+          <article class="metric-card">
+            <div class="metric-top"><span>TOTAL INVESTIGATIONS</span><span class="metric-symbol">⌁</span></div>
+            <strong id="metric-total">0</strong>
+            <small>Scans recorded in this browser</small>
+          </article>
+          <article class="metric-card">
+            <div class="metric-top"><span>CONFIRMED MALWARE</span><span class="metric-symbol red-text">▲</span></div>
+            <strong class="red-text" id="metric-threats">0</strong>
+            <small>Matched URLhaus database</small>
+          </article>
+          <article class="metric-card">
+            <div class="metric-top"><span>SUSPICIOUS INDICATORS</span><span class="metric-symbol amber-text">◇</span></div>
+            <strong class="amber-text" id="metric-suspicious">0</strong>
+            <small>Typosquatting & deception alerts</small>
+          </article>
+          <article class="metric-card">
+            <div class="metric-top"><span>VERIFIED / UNFLAGGED</span><span class="metric-symbol green-text">◎</span></div>
+            <strong class="green-text" id="metric-clean">0</strong>
+            <small>Top domains & clean baseline</small>
+          </article>
+        </div>
+
+        <div class="lower-grid">
+          <article class="panel">
+            <div class="panel-head">
+              <div>
+                <div class="eyebrow">RECENT ACTIVITY</div>
+                <h3>Investigation log</h3>
+              </div>
+              <button class="text-btn" data-go="history">VIEW ALL ↗</button>
+            </div>
+            <div id="recent-list" class="activity-list">
+              <div class="empty-state">No investigations recorded yet. Submit a URL in the Scanner to begin.</div>
+            </div>
+          </article>
+
+          <article class="panel source-panel">
+            <div class="panel-head">
+              <div>
+                <div class="eyebrow">CONNECTIVITY</div>
+                <h3>Intelligence sources</h3>
+              </div>
+              <span class="tiny-live"><i></i> STATUS</span>
+            </div>
+            <div id="source-mini" class="source-list">
+              <div class="source-row"><span>Local Heuristic Engine</span><b>ACTIVE</b></div>
+              <div class="source-row"><span>URLhaus Community Feed</span><b>CHECKING</b></div>
+              <div class="source-row"><span>VirusTotal Integration</span><b>DISABLED</b></div>
+            </div>
+            <p class="source-note">100% Free & Open Community Architecture. Operates without any payment, billing accounts, or paid API tiers.</p>
+          </article>
+        </div>
+      </section>
+
+      <!-- View 2: URL Intelligence Scanner -->
+      <section class="view" id="view-scanner">
+        <div class="scanner-intro">
+          <div class="eyebrow red-text">DRAGON PROTOCOL / URL INVESTIGATION CONSOLE</div>
+          <h2>Interrogate the unknown.</h2>
+          <p>Submit any HTTP/HTTPS URL for deep structural inspection, typosquatting checks, and free community threat database queries.</p>
+        </div>
+
+        <div class="scanner-console">
+          <div class="console-top">
+            <span><i class="pulse-dot"></i> SECURE ANALYSIS CONSOLE</span>
+            <span class="mono">SPZ / ENGINE-v2.0</span>
+          </div>
+          <label for="url-input">TARGET URL</label>
+          <div class="url-entry">
+            <span class="url-prefix">↗</span>
+            <input id="url-input" type="url" placeholder="https://example.com/suspicious-path" autocomplete="url" />
+            <button id="scan-btn" class="primary-btn">ANALYSE TARGET <span>→</span></button>
+          </div>
+          <div class="console-hints">
+            <span>◈ HTTP / HTTPS SUPPORTED</span>
+            <span>◈ 1,000 LEGITIMATE TOP DOMAINS INDEXED</span>
+            <span>◈ NO EXECUTION OR VISIT TO TARGET</span>
+            <span>◈ ZERO-BILLING GUARANTEE</span>
+          </div>
+        </div>
+
+        <!-- Professional Laser Scanning Animation Stage (Cybersecurity Inspection) -->
+        <div class="scan-stage hidden" id="scan-stage" aria-live="assertive">
+          <div class="scan-visual">
+            <div class="scan-grid"></div>
+            <div class="scan-glow-backdrop"></div>
+            <div class="scan-terminal">
+              <div class="scan-terminal-top">
+                <span class="scan-chip"><span class="scan-beacon"></span> CYBERSTREAM OPTICAL INSPECTION</span>
+                <span class="scan-chip mono" id="scan-phase-indicator">SYNTAX ANALYSIS</span>
+              </div>
+              <div class="scan-target-box">
+                <span class="scan-label mono">STREAMING PAYLOAD TO PARSER</span>
+                <div class="scan-url-wrapper">
+                  <div class="scan-url-display mono" id="scan-target">AWAITING TARGET URL</div>
+                  <div class="scan-beam-illuminator"></div>
+                </div>
+              </div>
+              <div class="scan-status-strip">
+                <b id="scan-stage-title">PARSING URL SPECIFICATION</b>
+                <small id="scan-stage-sub">Validating protocol, domain boundaries, and character encoding</small>
+              </div>
+            </div>
+            <!-- Precision horizontal red laser beam and reflections -->
+            <div class="scan-laser-beam"></div>
+            <div class="scan-laser-reflection"></div>
+          </div>
+          <div class="scan-progress">
+            <div class="progress-track"><i id="progress-fill"></i></div>
+            <div class="progress-steps">
+              <span class="step active">SYNTAX</span>
+              <span class="step">TOP DOMAINS</span>
+              <span class="step">COMMUNITY</span>
+              <span class="step">VERDICT</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Analysis Results Container -->
+        <div id="result" class="result-wrap hidden" aria-live="polite"></div>
+
+        <div class="privacy-note">
+          <span>ⓘ</span>
+          <p>Privacy Note: SPRIZAN <b>never visits, executes, or fetches the target website</b>. The URL string is parsed locally and sent to the free community URLhaus feed if configured. Never submit links containing session tokens, private passwords, or confidential data.</p>
+        </div>
+      </section>
+
+      <!-- View 3: Investigation History -->
+      <section class="view" id="view-history">
+        <div class="section-heading">
+          <div>
+            <div class="eyebrow">LOCAL INVESTIGATION RECORDS</div>
+            <h3>Investigation history</h3>
+          </div>
+          <button class="text-btn" id="clear-history">CLEAR HISTORY</button>
+        </div>
+        <div class="panel">
+          <div id="history-list" class="activity-list">
+            <div class="empty-state">No saved investigations yet.</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- View 4: Intelligence Sources -->
+      <section class="view" id="view-sources">
+        <div class="scanner-intro">
+          <div class="eyebrow red-text">INTELLIGENCE ECOSYSTEM</div>
+          <h2>Know what is connected.</h2>
+          <p>SPRIZAN operates with 100% free threat intelligence and local heuristic analysis. No paid API subscriptions or credit cards required.</p>
+        </div>
+        <div class="source-cards" id="source-cards"></div>
+        <div class="privacy-note">
+          <span>!</span>
+          <p>Your free abuse.ch URLhaus Auth-Key belongs strictly in the server-side .env file. Never commit secrets to source code or share screenshots.</p>
+        </div>
+      </section>
+
+      <footer>
+        <span>SPRIZAN CORE <b>●</b> OPERATIONAL (100% FREE COMMUNITY EDITION)</span>
+        <span>ANALYSIS IS EVIDENCE-BASED · NOT AN ABSOLUTE SAFETY GUARANTEE</span>
+      </footer>
+    </main>
+  </div>
+
+  <div id="toast" class="toast" role="status"></div>
+  <script src="./app.js" defer></script>
+</body>
+</html>
