@@ -1,0 +1,14 @@
+{
+  "name": "sprizan-threat-intelligence",
+  "version": "1.0.0",
+  "private": true,
+  "description": "SPRIZAN — explainable URL threat intelligence dashboard",
+  "type": "module",
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "node --watch server/index.js",
+    "test": "node test/verify.js"
+  },
+  "dependencies": {"express": "^4.21.2", "dotenv": "^16.4.7"},
+  "engines": {"node": ">=18"}
+}
