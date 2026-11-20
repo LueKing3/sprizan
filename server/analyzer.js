@@ -1,69 +1,17 @@
 import { URL } from 'node:url';
-import { TOP_LEGITIMATE_DOMAINS, TARGET_BRANDS, isRecognizedTopDomain } from './top-domains.js';
+import {
+  TOP_LEGITIMATE_DOMAINS,
+  TARGET_BRANDS,
+  MULTI_PART_SUFFIXES,
+  MANAGED_HOSTING_PLATFORMS,
+  extractRegisteredDomain,
+  isRecognizedTopDomain
+} from './top-domains.js';
+
+export { extractRegisteredDomain, isRecognizedTopDomain };
 
 /**
- * Comprehensive multi-part public suffixes (2-level and 3-level ccTLDs).
- * Ensures accurate registered domain extraction for global and regional sites.
- */
-const MULTI_PART_TLDS = new Set([
-  // India
-  'co.in', 'org.in', 'net.in', 'gov.in', 'ac.in', 'edu.in', 'res.in', 'mil.in', 'gen.in', 'ind.in',
-  // United Kingdom
-  'co.uk', 'org.uk', 'gov.uk', 'ac.uk', 'me.uk', 'ltd.uk', 'police.uk', 'net.uk', 'sch.uk',
-  // Australia
-  'com.au', 'net.au', 'org.au', 'edu.au', 'gov.au', 'id.au',
-  // New Zealand
-  'co.nz', 'net.nz', 'org.nz', 'govt.nz', 'ac.nz', 'geek.nz', 'school.nz',
-  // Japan
-  'co.jp', 'ne.jp', 'ac.jp', 'go.jp', 'or.jp', 'ed.jp', 'lg.jp',
-  // Brazil
-  'com.br', 'net.br', 'org.br', 'gov.br', 'edu.br', 'art.br',
-  // China
-  'com.cn', 'net.cn', 'org.cn', 'gov.cn', 'edu.cn',
-  // Singapore
-  'com.sg', 'edu.sg', 'gov.sg', 'org.sg', 'net.sg',
-  // South Africa
-  'co.za', 'org.za', 'gov.za', 'ac.za', 'net.za',
-  // Mexico
-  'com.mx', 'org.mx', 'gob.mx', 'edu.mx', 'net.mx',
-  // South Korea
-  'co.kr', 'ne.kr', 're.kr', 'or.kr', 'go.kr', 'ac.kr',
-  // Taiwan
-  'com.tw', 'org.tw', 'gov.tw', 'edu.tw', 'idv.tw',
-  // Hong Kong
-  'com.hk', 'org.hk', 'gov.hk', 'edu.hk', 'idv.hk',
-  // Turkey
-  'com.tr', 'edu.tr', 'gov.tr', 'org.tr', 'net.tr',
-  // Argentina
-  'com.ar', 'org.ar', 'gov.ar', 'edu.ar', 'net.ar',
-  // Colombia
-  'com.co', 'co.co', 'edu.co', 'org.co', 'gov.co',
-  // Malaysia
-  'com.my', 'edu.my', 'gov.my', 'org.my', 'net.my',
-  // Indonesia
-  'co.id', 'web.id', 'go.id', 'ac.id', 'sch.id', 'or.id',
-  // Vietnam
-  'com.vn', 'edu.vn', 'gov.vn', 'org.vn', 'net.vn',
-  // Pakistan
-  'com.pk', 'org.pk', 'gov.pk', 'edu.pk', 'net.pk',
-  // Nigeria
-  'com.ng', 'org.ng', 'gov.ng', 'edu.ng', 'net.ng',
-  // Philippines
-  'com.ph', 'org.ph', 'gov.ph', 'edu.ph', 'net.ph',
-  // Bangladesh
-  'com.bd', 'org.bd', 'gov.bd', 'edu.bd',
-  // Thailand
-  'co.th', 'ac.th', 'go.th', 'or.th',
-  // Egypt, Saudi, UAE
-  'com.eg', 'edu.eg', 'gov.eg',
-  'com.sa', 'edu.sa', 'gov.sa',
-  'com.ae', 'gov.ae', 'ac.ae',
-  // Canada
-  'gc.ca', 'gov.bc.ca', 'on.ca', 'qc.ca'
-]);
-
-/**
- * TLDs with historically high abuse or disposable registration volumes.
+ * TLDs with historically high prevalence in disposable and abusive infrastructure.
  */
 const HIGH_ABUSE_TLDS = new Set([
   'tk', 'ml', 'ga', 'cf', 'gq', 'top', 'work', 'click', 'buzz',
@@ -80,14 +28,15 @@ const SUSPICIOUS_PORTS = {
   25: 'SMTP (Mail routing)',
   110: 'POP3 (Mail access)',
   143: 'IMAP (Mail access)',
-  445: 'SMB (File sharing - frequently abused)',
+  445: 'SMB (Direct host file sharing - heavily abused)',
   1337: 'Common backdoor / exploit port',
-  3389: 'RDP (Remote Desktop)',
+  3389: 'RDP (Remote Desktop Protocol)',
   6667: 'IRC (Internet Relay Chat / Botnet C2)'
 };
 
 /**
  * Damerau-Levenshtein distance algorithm for typosquatting detection.
+ * Accounts for insertions, deletions, substitutions, and adjacent transpositions.
  */
 function damerauLevenshtein(a, b) {
   if (a === b) return 0;
@@ -117,26 +66,21 @@ function damerauLevenshtein(a, b) {
 }
 
 /**
- * Extract the true registered domain (e.g., "amazon.in" from "www.amazon.in",
- * "google.co.in" from "mail.google.co.in", or "bbc.co.uk" from "news.bbc.co.uk").
+ * Check if an IP address is private, loopback, carrier-grade NAT, or cloud metadata.
+ * Strict SSRF mitigation: prevents internal network reconnaissance.
  */
-export function extractRegisteredDomain(hostname) {
-  const clean = hostname.toLowerCase().replace(/^www\./, '');
-  const parts = clean.split('.');
-  if (parts.length <= 2) return clean;
+export function isPrivateOrReservedIP(ip) {
+  if (!ip) return false;
+  const clean = ip.replace(/^\[|\]$/g, '').trim().toLowerCase();
 
-  const lastTwo = parts.slice(-2).join('.');
-  if (MULTI_PART_TLDS.has(lastTwo) && parts.length >= 3) {
-    return parts.slice(-3).join('.');
-  }
-  return parts.slice(-2).join('.');
-}
+  // IPv6 checks
+  if (clean === '::1' || clean === '0:0:0:0:0:0:0:1') return { type: 'IPv6 Loopback', range: '::1/128' };
+  if (clean === '::' || clean === '0:0:0:0:0:0:0:0') return { type: 'IPv6 Unspecified', range: '::/128' };
+  if (clean.startsWith('fe80:')) return { type: 'IPv6 Link-Local', range: 'fe80::/10' };
+  if (clean.startsWith('fc00:') || clean.startsWith('fd00:')) return { type: 'IPv6 Unique Local', range: 'fc00::/7' };
 
-/**
- * Check if an IP address is in a private, loopback, or reserved range.
- */
-function isPrivateOrReservedIP(ip) {
-  const octets = ip.split('.').map(Number);
+  // IPv4 checks
+  const octets = clean.split('.').map(Number);
   if (octets.length !== 4 || octets.some(o => isNaN(o) || o < 0 || o > 255)) return false;
 
   const [o1, o2] = octets;
@@ -144,7 +88,8 @@ function isPrivateOrReservedIP(ip) {
   if (o1 === 10) return { type: 'Private RFC 1918', range: '10.0.0.0/8' };
   if (o1 === 172 && o2 >= 16 && o2 <= 31) return { type: 'Private RFC 1918', range: '172.16.0.0/12' };
   if (o1 === 192 && o2 === 168) return { type: 'Private RFC 1918', range: '192.168.0.0/16' };
-  if (o1 === 169 && o2 === 254) return { type: 'Link-Local', range: '169.254.0.0/16' };
+  if (o1 === 169 && o2 === 254) return { type: 'Cloud Metadata / Link-Local', range: '169.254.0.0/16' };
+  if (o1 === 100 && o2 >= 64 && o2 <= 127) return { type: 'Carrier-Grade NAT', range: '100.64.0.0/10' };
   if (o1 === 0) return { type: 'Current Network', range: '0.0.0.0/8' };
 
   return false;
@@ -152,10 +97,7 @@ function isPrivateOrReservedIP(ip) {
 
 /**
  * Check registered domain against target brands for typosquatting, combosquatting,
- * and visual leetspeak lookalikes.
- *
- * @param {string} registeredDomain
- * @returns {object|null} Typosquatting alert or null
+ * and visual character substitutions.
  */
 function detectTyposquatting(registeredDomain) {
   const domainLabel = registeredDomain.split('.')[0].toLowerCase();
@@ -185,29 +127,27 @@ function detectTyposquatting(registeredDomain) {
       return {
         type: 'Combosquatting / Hyphenated Brand Lure',
         brand: brandName,
-        detail: `The registered domain "${registeredDomain}" attaches an account lure keyword to popular brand "${brandName}". Combosquatting is frequently used to manufacture a deceptive sense of legitimacy.`
+        detail: `The registered domain "${registeredDomain}" pairs a popular brand name ("${brandName}") with an account/security lure keyword. Combosquatting is a known phishing tactic to deceive users.`
       };
     }
 
-    // 2. Character substitution / Leetspeak: e.g. paypa1.com, g00gle.com
+    // 2. Character substitution / Leetspeak (e.g. paypa1.com, g00gle.com, rnicrosoft.com)
     if (normalizedLabel === brandKey && domainLabel !== brandKey) {
       return {
         type: 'Character Substitution / Lookalike Domain',
         brand: brandName,
-        detail: `The registered domain "${registeredDomain}" substitutes characters (e.g. "1" for "l" or "0" for "o") to visually mimic brand "${brandName}".`
+        detail: `The registered domain "${registeredDomain}" substitutes characters (e.g. "1" for "l" or "0" for "o") to visually imitate brand "${brandName}".`
       };
     }
 
-    // 3. Typosquatting / Damerau-Levenshtein edit distance: e.g. amazn, amzon, goolge
-    // Only check if length is reasonably close
+    // 3. Typosquatting / Edit distance (e.g. amazn.in, goolge.com)
     if (Math.abs(domainLabel.length - brandKey.length) <= 2) {
       const dist = damerauLevenshtein(domainLabel, brandKey);
-      // Distance of 1 (omission, insertion, transposition) is high-confidence typosquatting
       if (dist === 1 && domainLabel !== brandKey) {
         return {
           type: 'Potential Typosquatting / Lookalike Variation',
           brand: brandName,
-          detail: `The registered domain "${registeredDomain}" varies by only 1 character from popular brand "${brandName}" (edit distance: 1). Typosquatting domains exploit typographical errors to deceive visitors.`
+          detail: `The registered domain "${registeredDomain}" varies by only 1 character from popular brand "${brandName}" (edit distance: 1). Typosquatting exploits typographical mistakes to hijack traffic.`
         };
       }
     }
@@ -219,7 +159,7 @@ function detectTyposquatting(registeredDomain) {
 /**
  * Inspect a URL and return detailed structural findings and severity score.
  * Never executes or fetches the URL.
- *
+ * 
  * @param {string} raw
  * @returns {object} Analysis report object
  */
@@ -230,6 +170,11 @@ export function inspectUrl(raw) {
   }
   if (trimmed.length > 2048) {
     throw new Error('URL exceeds the maximum length limit of 2,048 characters.');
+  }
+
+  // Reject dangerous non-web schemes and control characters
+  if (/[\x00-\x1F\x7F]/.test(trimmed)) {
+    throw new Error('URL contains illegal control characters or null bytes.');
   }
 
   let parsed;
@@ -251,7 +196,7 @@ export function inspectUrl(raw) {
     throw new Error('URL does not specify a valid host domain.');
   }
 
-  const host = rawHost.toLowerCase().replace(/^www\./, '');
+  const host = rawHost.toLowerCase().replace(/^www\./, '').replace(/\.$/, '');
   const full = parsed.href;
   const findings = [];
   const add = (severity, title, detail, points, category = 'structural') => {
@@ -263,37 +208,35 @@ export function inspectUrl(raw) {
   const isTopDomain = topDomainCheck.isTopDomain;
 
   let isIP = false;
-  let domainPoints = 0;
-  let transportPoints = 0;
-  let structuralPoints = 0;
-  let contentPoints = 0;
+  let isInternalIP = false;
 
   // 1. Embedded Credentials check (user:pass@host)
   if (parsed.username || parsed.password) {
     add(
       'high',
-      'Embedded credentials in URL',
-      'The URL contains user credentials before the hostname. This is frequently used in phishing attacks to mislead victims regarding the actual target server.',
-      24,
+      'Embedded credentials in URL authority',
+      'The URL contains user credentials before the hostname. This is frequently used in phishing attacks to mislead victims regarding the actual target destination.',
+      35,
       'domain'
     );
-  } else if (/@/.test(trimmed)) {
+  } else if (/@/.test(trimmed.split('?')[0].split('#')[0])) {
     add(
       'high',
-      'At-sign (@) in URL string',
-      'An at-sign was detected in the URL. Characters before the "@" symbol can visually disguise the true destination domain that appears after it.',
-      20,
+      'At-sign (@) in URL authority',
+      'An at-sign was detected in the URL authority section. Browsers interpret text before the "@" as userinfo, while the actual destination server appears after it.',
+      30,
       'domain'
     );
   }
 
   // 2. Protocol / Transport Security
+  // Plain HTTP is noted as an informational/low signal, NOT treated as fraud by itself
   if (parsed.protocol === 'http:') {
     add(
-      'medium',
+      'low',
       'Unencrypted HTTP connection',
-      'The URL uses plain HTTP without TLS encryption. Traffic can be monitored or modified in transit. While not proof of malice, modern legitimate sites default to HTTPS.',
-      12,
+      'The URL uses plain HTTP without TLS encryption. Traffic can be monitored or modified in transit. While not evidence of fraud by itself, modern web services default to HTTPS.',
+      5,
       'transport'
     );
   }
@@ -305,16 +248,16 @@ export function inspectUrl(raw) {
       add(
         'high',
         `Unusual service port (${portNum})`,
-        `The URL connects to port ${portNum} (${SUSPICIOUS_PORTS[portNum]}). Legitimate web applications rarely run on internal or administrative service ports.`,
-        22,
+        `The URL connects to port ${portNum} (${SUSPICIOUS_PORTS[portNum]}). Legitimate web applications rarely run on internal or non-web service ports.`,
+        30,
         'transport'
       );
-    } else if (![80, 443].includes(portNum)) {
+    } else if (![80, 443, 8080, 8443, 3000, 5000, 8000].includes(portNum)) {
       add(
         'low',
         `Non-standard web port (${portNum})`,
-        `The URL specifies custom port ${portNum}. Legitimate web services normally run on standard ports (80 for HTTP, 443 for HTTPS).`,
-        8,
+        `The URL specifies custom port ${portNum}. Standard public web services typically operate on standard ports 80 (HTTP) or 443 (HTTPS).`,
+        6,
         'transport'
       );
     }
@@ -327,46 +270,50 @@ export function inspectUrl(raw) {
     /^(0x[0-9a-fA-F]+\.){3}0x[0-9a-fA-F]+$/i.test(rawHostBeforeCanonical);
 
   const isIPv4 = /^(\d{1,3}\.){3}\d{1,3}$/.test(host);
-  const isIPv6 = /^\[.*\]$/.test(rawHost);
+  const isIPv6 = /^\[.*\]$/.test(rawHost) || /^[0-9a-fA-F:]+$/.test(host) && host.includes(':');
 
   if (isHexOrDwordIP) {
     isIP = true;
     add(
       'high',
       'Obfuscated numeric IP representation',
-      `The hostname uses hexadecimal or integer notation ("${rawHostBeforeCanonical}") to disguise an IP destination from URL string filters.`,
-      25,
+      `The hostname uses hexadecimal, octal, or integer notation ("${rawHostBeforeCanonical}") to disguise an IP destination from URL string filters.`,
+      35,
       'domain'
     );
   }
 
-  if (isIPv4) {
+  if (isIPv4 || isIPv6) {
     isIP = true;
     const reserved = isPrivateOrReservedIP(host);
     if (reserved) {
+      isInternalIP = true;
       add(
         'high',
-        `Internal / ${reserved.type} IP address`,
-        `The URL targets a private or internal network IP address (${reserved.range}). Legitimate public internet links do not target internal addresses.`,
-        25,
+        `Internal / ${reserved.type} IP address (SSRF Risk)`,
+        `The URL targets a private, internal, or loopback network address (${reserved.range}). Legitimate public internet links do not target internal host infrastructure.`,
+        35,
         'domain'
       );
     } else if (!isHexOrDwordIP) {
       add(
         'high',
-        'Direct IPv4 address used as host',
-        'The link points directly to a numeric IP address rather than a domain name. This is commonly used in malware C2 servers and phishing to evade domain-based reputation filters.',
-        22,
+        'Direct numeric IP address used as host',
+        'The link points directly to a numeric IP address rather than a domain name. Direct IP hosts are commonly used in malware C2 servers and phishing to evade domain-based reputation lists.',
+        25,
         'domain'
       );
     }
-  } else if (isIPv6) {
-    isIP = true;
+  }
+
+  // Localhost keyword check
+  if (host === 'localhost' || host.endsWith('.localhost')) {
+    isInternalIP = true;
     add(
       'high',
-      'Direct IPv6 address used as host',
-      'The link targets an explicit IPv6 address instead of a standard registered domain name.',
-      20,
+      'Internal / Localhost destination targeted (SSRF Risk)',
+      'The URL targets the local loopback host (localhost). Legitimate public internet links do not target localhost.',
+      35,
       'domain'
     );
   }
@@ -376,8 +323,8 @@ export function inspectUrl(raw) {
     add(
       'high',
       'Internationalized domain name (Punycode)',
-      'The domain contains Punycode ("xn--"). While legitimate for non-Latin writing systems, attackers frequently use it in homograph attacks to imitate well-known Latin brand domains with visually identical foreign glyphs.',
-      22,
+      'The domain contains Punycode ("xn--"). While legitimate for non-Latin writing systems, attackers frequently deploy Punycode homographs to visually impersonate popular Latin brand domains.',
+      25,
       'structural'
     );
   }
@@ -387,26 +334,26 @@ export function inspectUrl(raw) {
     add(
       'high',
       'Invisible or bidirectional unicode characters',
-      'The URL contains zero-width, soft-hyphen, or direction-reversing unicode characters. These are malicious obfuscation techniques used to trick the human eye or bypass regex filters.',
-      25,
+      'The URL contains zero-width, soft-hyphen, or direction-reversing unicode characters used to obscure true URLs or bypass security filters.',
+      35,
       'structural'
     );
   }
 
   // 6. Domain Structure, Brand Impersonation & Typosquatting
   let detectedBrandSpoof = false;
-  if (!isIP) {
+  if (!isIP && !isInternalIP) {
     const hostLabels = host.split('.');
     const registeredParts = registeredDomain.split('.');
     const subdomains = hostLabels.slice(0, hostLabels.length - registeredParts.length);
 
-    // Excessive subdomain depth
-    if (hostLabels.length >= 5) {
+    // Deep subdomain nesting (only flagged if >= 5 labels and NOT on a recognized top domain)
+    if (hostLabels.length >= 5 && !isTopDomain) {
       add(
         'medium',
         'Excessive subdomain depth',
-        `The hostname contains ${hostLabels.length} subdomain labels. Deeply nested subdomains are often deployed to push the real registered domain out of view on mobile screens.`,
-        12,
+        `The hostname contains ${hostLabels.length} subdomain labels. Deeply nested subdomains on unranked domains are often used in phishing to push the real domain off-screen on mobile devices.`,
+        15,
         'structural'
       );
     }
@@ -419,7 +366,7 @@ export function inspectUrl(raw) {
         'high',
         `${typoAlert.type} (${typoAlert.brand.toUpperCase()})`,
         typoAlert.detail,
-        25,
+        35,
         'domain'
       );
     }
@@ -440,7 +387,7 @@ export function inspectUrl(raw) {
             'high',
             `Misleading brand in subdomain (${meta.name.toUpperCase()})`,
             `The URL displays brand keyword "${brandKey}" in its subdomain, but the actual registered destination is "${registeredDomain}". This is a primary indicator of brand impersonation phishing.`,
-            25,
+            35,
             'domain'
           );
           break;
@@ -457,15 +404,7 @@ export function inspectUrl(raw) {
           'medium',
           `High-risk TLD (.${tld}) with account lure`,
           `The domain uses a top-level domain frequently associated with disposable registrations (.${tld}) combined with sensitive account keywords.`,
-          16,
-          'domain'
-        );
-      } else {
-        add(
-          'low',
-          `Elevated-risk top-level domain (.${tld})`,
-          `The domain uses an extension (.${tld}) with elevated prevalence in disposable and abusive infrastructure.`,
-          6,
+          20,
           'domain'
         );
       }
@@ -481,8 +420,8 @@ export function inspectUrl(raw) {
     add(
       'high',
       'Deceptive double file extension',
-      `The URL path contains a deceptive double extension "${doubleExtMatch[0]}". Attackers use this to trick users into downloading executable malware disguised as a document or image.`,
-      25,
+      `The URL path contains a deceptive double extension "${doubleExtMatch[0]}". Attackers use this to trick users into executing malware disguised as a document or image.`,
+      35,
       'content'
     );
   }
@@ -494,34 +433,44 @@ export function inspectUrl(raw) {
       'high',
       'Cryptocurrency credential / seed phrase lure',
       'The URL targets cryptocurrency private keys, seed phrases, or wallet recovery files. Legitimate services never request secret recovery phrases via web links.',
-      25,
+      35,
       'content'
     );
   }
 
-  // Potential Open Redirect parameters
-  for (const [param, val] of parsed.searchParams.entries()) {
-    if (['url', 'redirect', 'redirect_uri', 'next', 'dest', 'destination', 'return', 'goto', 'rurl', 'target', 'link'].includes(param.toLowerCase())) {
-      if (/^https?:\/\//i.test(val) || val.startsWith('//')) {
-        add(
-          'high',
-          `Potential open redirect parameter ("${param}")`,
-          `The query parameter "${param}" points directly to an external destination ("${val.slice(0, 50)}..."). Open redirects are exploited in phishing campaigns to route victims to unvetted external sites.`,
-          22,
-          'content'
-        );
-        break;
+  // Potential Open Redirect parameters:
+  // Only evaluate on non-top domains or when target is suspicious, preventing false positives on legitimate OAuth flows
+  if (!isTopDomain) {
+    for (const [param, val] of parsed.searchParams.entries()) {
+      if (['url', 'redirect', 'redirect_uri', 'next', 'dest', 'destination', 'return', 'goto', 'rurl', 'target', 'link'].includes(param.toLowerCase())) {
+        if (/^https?:\/\//i.test(val) || val.startsWith('//')) {
+          try {
+            const destUrl = new URL(val.startsWith('//') ? 'https:' + val : val);
+            const destRegistered = extractRegisteredDomain(destUrl.hostname);
+            // Only flag if redirecting to a completely different external domain
+            if (destRegistered && destRegistered !== registeredDomain) {
+              add(
+                'high',
+                `Potential open redirect parameter ("${param}")`,
+                `The query parameter "${param}" points to an external destination ("${val.slice(0, 50)}..."). Open redirects are exploited in phishing to route victims from trusted links to unvetted external sites.`,
+                25,
+                'content'
+              );
+              break;
+            }
+          } catch {}
+        }
       }
     }
   }
 
-  // 8. Obfuscation & Encoding
-  if (/(%[0-9a-fA-F]{2}){4,}/i.test(full)) {
+  // 8. Dangerous Obfuscation & Encoding
+  if (/%00|%0d%0a/i.test(full)) {
     add(
-      'medium',
-      'Repeated percent-encoding in URL',
-      'The URL contains four or more consecutive percent-encoded sequences, often employed to obscure the true path or parameters from casual inspection.',
-      8,
+      'high',
+      'Null byte or CRLF injection sequence detected',
+      'The URL contains null bytes (%00) or CRLF characters (%0D%0A) designed to exploit parser vulnerabilities or HTTP response splitting.',
+      35,
       'structural'
     );
   }
@@ -531,46 +480,17 @@ export function inspectUrl(raw) {
       'medium',
       'Double percent-encoding detected',
       'The URL contains double-encoded character sequences (%25..), which can bypass certain web application firewalls and security filters.',
-      12,
+      15,
       'structural'
     );
-  }
-
-  // 9. Host and URL Length (Low-severity structural signals)
-  if (host.length > 50) {
-    add(
-      'low',
-      'Unusually long hostname',
-      `The hostname is ${host.length} characters long. While some legitimate CDNs use long hosts, attackers also generate long hostnames to avoid collisions.`,
-      5,
-      'structural'
-    );
-  }
-
-  if (full.length > 250) {
-    add(
-      'low',
-      'Unusually long URL string',
-      `The full URL is ${full.length} characters long. Long URLs can be legitimate but may also harbor large tracking or payload delivery parameters.`,
-      4,
-      'structural'
-    );
-  }
-
-  // 10. Sensitive keywords on UNVERIFIED domains only (avoid false positives on top domains)
-  if (!isTopDomain && !detectedBrandSpoof && !isIP) {
-    if (/(login|verify|secure|account|update|wallet|password|confirm|banking|authentication)/i.test(host)) {
-      add(
-        'low',
-        'Account or authentication keywords in unranked host',
-        'The hostname on an unverified domain contains terms commonly associated with account or banking portals. On unverified domains, this can be an indicator of credential harvesting.',
-        6,
-        'domain'
-      );
-    }
   }
 
   // Calculate component scores with anti-double-counting caps
+  let domainPoints = 0;
+  let transportPoints = 0;
+  let structuralPoints = 0;
+  let contentPoints = 0;
+
   for (const f of findings) {
     if (f.category === 'domain') domainPoints += f.points;
     else if (f.category === 'transport') transportPoints += f.points;
@@ -578,17 +498,21 @@ export function inspectUrl(raw) {
     else if (f.category === 'content') contentPoints += f.points;
   }
 
-  const domainScore = Math.min(25, domainPoints);
+  const domainScore = Math.min(35, domainPoints);
   const transportScore = Math.min(25, transportPoints);
-  const structuralScore = Math.min(25, structuralPoints);
-  const contentScore = Math.min(25, contentPoints);
+  const structuralScore = Math.min(30, structuralPoints);
+  const contentScore = Math.min(35, contentPoints);
+
+  const highCount = findings.filter(f => f.severity === 'high').length;
+  const medCount = findings.filter(f => f.severity === 'medium').length;
+  const lowCount = findings.filter(f => f.severity === 'low').length;
 
   const highPoints = findings.filter(f => f.severity === 'high').reduce((acc, f) => acc + f.points, 0);
   const medPoints = findings.filter(f => f.severity === 'medium').reduce((acc, f) => acc + f.points, 0);
-  const lowPoints = Math.min(15, findings.filter(f => f.severity === 'low').reduce((acc, f) => acc + f.points, 0));
+  const lowPoints = Math.min(10, findings.filter(f => f.severity === 'low').reduce((acc, f) => acc + f.points, 0));
 
   let score = Math.min(100, highPoints + medPoints + lowPoints);
-  const hasHighSeverity = findings.some(f => f.severity === 'high');
+  const hasHighSeverity = highCount > 0;
 
   return {
     normalizedUrl: full,
@@ -602,6 +526,13 @@ export function inspectUrl(raw) {
     findings,
     score,
     hasHighSeverity,
+    isInternalIP,
+    findingCounts: {
+      high: highCount,
+      medium: medCount,
+      low: lowCount,
+      total: findings.length
+    },
     componentScores: {
       domain: domainScore,
       transport: transportScore,

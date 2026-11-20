@@ -10,16 +10,17 @@ const app = express();
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, '..');
 
-// Basic security middleware
+// Basic security middleware & body size limits
 app.use(express.json({ limit: '12kb' }));
 app.use(express.static(path.join(root, 'public')));
 
-// In-memory rate limiting to prevent abuse (60 requests per minute per IP)
+// Memory-bounded in-memory rate limiting to prevent abuse & memory exhaustion
 const rateLimitMap = new Map();
 const RATE_LIMIT_WINDOW_MS = 60 * 1000;
 const RATE_LIMIT_MAX_REQUESTS = 60;
+const MAX_RATE_LIMIT_ENTRIES = 10000;
 
-// Periodic cleanup of rate limit cache
+// Periodic cleanup of expired rate limit entries
 setInterval(() => {
   const now = Date.now();
   for (const [ip, data] of rateLimitMap.entries()) {
@@ -30,11 +31,16 @@ setInterval(() => {
 }, RATE_LIMIT_WINDOW_MS);
 
 function rateLimiter(req, res, next) {
-  const clientIp = req.ip || req.headers['x-forwarded-for'] || '127.0.0.1';
+  const clientIp = String(req.ip || req.headers['x-forwarded-for'] || '127.0.0.1').split(',')[0].trim();
   const now = Date.now();
   const entry = rateLimitMap.get(clientIp);
 
   if (!entry || now - entry.resetTime > RATE_LIMIT_WINDOW_MS) {
+    if (rateLimitMap.size >= MAX_RATE_LIMIT_ENTRIES) {
+      // Evict oldest entry if map exceeds memory limit
+      const oldestKey = rateLimitMap.keys().next().value;
+      if (oldestKey) rateLimitMap.delete(oldestKey);
+    }
     rateLimitMap.set(clientIp, { count: 1, resetTime: now });
     return next();
   }
@@ -54,7 +60,7 @@ function rateLimiter(req, res, next) {
  * Fetch wrapper with timeout and AbortController.
  * Strictly queries trusted threat-intel endpoints, NEVER the user-submitted URL.
  */
-const timeoutFetch = async (url, options = {}, ms = 8500) => {
+const timeoutFetch = async (url, options = {}, ms = 3500) => {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), ms);
   try {
@@ -68,16 +74,25 @@ const timeoutFetch = async (url, options = {}, ms = 8500) => {
  * Free URLhaus Community API (abuse.ch)
  * URLhaus provides free community threat intelligence.
  * Official API documentation: https://urlhaus.abuse.ch/api/
- * Requires a free Auth-Key from abuse.ch (zero billing, no credit card required).
+ * Requires zero payment, zero credit card, and zero Google Cloud billing.
  */
-async function checkUrlhaus(targetUrl) {
+async function checkUrlhaus(targetUrl, isInternalTarget = false) {
+  if (isInternalTarget) {
+    return {
+      source: 'URLhaus Community Threat Feed',
+      status: 'not_applicable',
+      matches: [],
+      note: 'Target resolves to private or internal network infrastructure. External threat intelligence query skipped for security (OWASP SSRF protection).'
+    };
+  }
+
   const key = process.env.URLHAUS_AUTH_KEY;
   if (!key) {
     return {
-      source: 'URLhaus Community Feed',
+      source: 'URLhaus Community Threat Feed',
       status: 'not_configured',
       matches: [],
-      note: 'Free Auth-Key not configured. Obtain a free key from https://urlhaus.abuse.ch/api/ (no credit card or payment required).'
+      note: 'Free URLhaus Auth-Key not configured. Obtain a free key from https://urlhaus.abuse.ch/api/ (no credit card or billing required).'
     };
   }
 
@@ -97,7 +112,7 @@ async function checkUrlhaus(targetUrl) {
 
     if (response.status === 401 || response.status === 403) {
       return {
-        source: 'URLhaus Community Feed',
+        source: 'URLhaus Community Threat Feed',
         status: 'error',
         matches: [],
         latencyMs: elapsed,
@@ -107,7 +122,7 @@ async function checkUrlhaus(targetUrl) {
 
     if (!response.ok) {
       return {
-        source: 'URLhaus Community Feed',
+        source: 'URLhaus Community Threat Feed',
         status: 'error',
         matches: [],
         latencyMs: elapsed,
@@ -119,7 +134,7 @@ async function checkUrlhaus(targetUrl) {
     const hit = data.query_status === 'ok';
 
     return {
-      source: 'URLhaus Community Feed',
+      source: 'URLhaus Community Threat Feed',
       status: 'checked',
       latencyMs: elapsed,
       matches: hit ? [{
@@ -136,16 +151,16 @@ async function checkUrlhaus(targetUrl) {
   } catch (err) {
     const isTimeout = err.name === 'AbortError';
     return {
-      source: 'URLhaus Community Feed',
+      source: 'URLhaus Community Threat Feed',
       status: 'error',
       matches: [],
-      note: isTimeout ? 'URLhaus request timed out (8.5s).' : (err.message || 'URLhaus service unavailable.')
+      note: isTimeout ? 'URLhaus request timed out (3.5s).' : (err.message || 'URLhaus service unavailable.')
     };
   }
 }
 
 /**
- * Health check endpoint - reports 100% free mode status and source configuration.
+ * Health check endpoint - reports free mode status and source configuration.
  * Never leaks API keys.
  */
 app.get('/api/health', (_req, res) => {
@@ -179,11 +194,11 @@ app.post('/api/scan', rateLimiter, async (req, res) => {
     // 1. Safe local structural inspection (never fetches target URL)
     const local = inspectUrl(raw);
 
-    // 2. Query free URLhaus community database
-    const urlhausResult = await checkUrlhaus(local.normalizedUrl);
+    // 2. Query free URLhaus community database (SSRF guarded: skips internal IPs)
+    const urlhausResult = await checkUrlhaus(local.normalizedUrl, local.isInternalIP);
     const sources = [urlhausResult];
 
-    // 3. Correlate findings into the 6 distinct verdicts
+    // 3. Evidence-Based Verdict Determination (Three Clear Categories)
     const isConfirmedMalware = urlhausResult.status === 'checked' && urlhausResult.matches.length > 0;
     let score = local.score;
     let verdict;
@@ -191,29 +206,35 @@ app.post('/api/scan', rateLimiter, async (req, res) => {
     const reputationStatus = urlhausResult.status;
 
     if (isConfirmedMalware) {
+      // Category A: CONFIRMED MALICIOUS
       score = Math.max(score, 95);
-      verdict = 'CONFIRMED MALWARE';
-      verdictDetail = 'The URL was positively identified in the URLhaus community malware database as an active threat.';
-    } else if (local.hasHighSeverity || score >= 25) {
+      verdict = 'CONFIRMED MALICIOUS';
+      verdictDetail = `The URL was positively verified in the URLhaus community malware database as an active threat (${urlhausResult.matches[0]?.threat || 'Malware Distribution'}).`;
+    } else if (local.hasHighSeverity || score >= 30) {
+      // Category B: SUSPICIOUS
       verdict = 'SUSPICIOUS';
-      verdictDetail = local.findings.length > 0
-        ? `Local structural analysis detected ${local.findings.length} warning indicator(s), including ${local.hasHighSeverity ? 'high-severity deception risks' : 'elevated risk patterns'}.`
-        : 'Local heuristic analysis detected significant warning indicators or deceptive patterns.';
+      const highFindings = local.findings.filter(f => f.severity === 'high');
+      const reasons = highFindings.length > 0
+        ? highFindings.map(f => f.title).join(', ')
+        : `${local.findings.length} warning indicators detected`;
+      verdictDetail = `Local analysis identified meaningful risk indicators: ${reasons}. Review individual evidence items below.`;
       score = Math.max(score, local.hasHighSeverity ? 50 : 35);
     } else if (urlhausResult.status === 'checked') {
-      verdict = 'NO KNOWN THREATS DETECTED';
+      // Category C1: NO THREAT INDICATORS DETECTED (external threat intel verified clean)
+      verdict = 'NO THREAT INDICATORS DETECTED';
       verdictDetail = local.isPopularDomain
-        ? `Local analysis identified this as a recognized top domain (${local.registeredDomain}) with no structural anomalies. External threat intelligence (URLhaus) completed and found no active malware records.`
-        : 'Local structural analysis identified no red flags, and external threat intelligence (URLhaus) completed with no matching malware records.';
-    } else if (urlhausResult.status === 'not_configured') {
-      verdict = 'NOT FLAGGED BY LOCAL ANALYSIS';
+        ? `Local analysis identified this as a recognized top domain (${local.registeredDomain}) with no structural anomalies. External threat intelligence (URLhaus) completed with no matching malware records.`
+        : 'Local structural analysis identified no warning indicators, and external threat intelligence (URLhaus) completed with no active malware records.';
+    } else if (urlhausResult.status === 'not_configured' || urlhausResult.status === 'not_applicable') {
+      // Category C2: NO SUSPICIOUS INDICATORS FOUND — LOCAL ANALYSIS ONLY
+      verdict = 'NO SUSPICIOUS INDICATORS FOUND — LOCAL ANALYSIS ONLY';
       verdictDetail = local.isPopularDomain
-        ? `Local analysis identified this as a recognized top domain (${local.registeredDomain}) and found no structural warning indicators. External community threat database check was not configured.`
-        : 'No structural or heuristic warning indicators were found by local analysis. External community threat database check was not configured.';
+        ? `Local analysis identified this as a recognized top domain (${local.registeredDomain}) with zero warning indicators. External community threat database was not configured.`
+        : 'No structural or heuristic warning indicators were found by local analysis. External community threat database was not configured.';
     } else {
-      // urlhausResult.status === 'error' (some checks succeeded, others failed)
+      // Category C3: PARTIALLY VERIFIED (local passed, external errored/timed out)
       verdict = 'PARTIALLY VERIFIED';
-      verdictDetail = `Local structural analysis completed with no warnings, but external threat intelligence check failed or timed out (${urlhausResult.note}).`;
+      verdictDetail = `Local structural analysis completed with zero warnings, but external threat intelligence check failed or timed out (${urlhausResult.note}).`;
     }
 
     score = Math.min(100, Math.max(0, score));
@@ -247,6 +268,7 @@ app.post('/api/scan', rateLimiter, async (req, res) => {
       riskLevel,
       reputationStatus,
       findings: local.findings,
+      findingCounts: local.findingCounts,
       sources,
       sourcesChecked: completedCount,
       sourcesConfigured: configuredCount,

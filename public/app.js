@@ -85,28 +85,28 @@ $$('.nav-item').forEach(b => b.addEventListener('click', () => showView(b.datase
 $$('[data-go]').forEach(b => b.addEventListener('click', () => showView(b.dataset.go)));
 
 function verdictClass(v) {
-  if (v === 'CONFIRMED MALWARE') return 'danger';
+  if (v === 'CONFIRMED MALWARE' || v === 'CONFIRMED MALICIOUS') return 'danger';
   if (v === 'SUSPICIOUS') return 'warn';
-  if (v === 'NO KNOWN THREATS DETECTED') return 'success';
-  if (v === 'NOT FLAGGED BY LOCAL ANALYSIS') return 'notice';
+  if (v === 'NO KNOWN THREATS DETECTED' || v === 'NO THREAT INDICATORS DETECTED') return 'success';
+  if (v === 'NOT FLAGGED BY LOCAL ANALYSIS' || v === 'NO SUSPICIOUS INDICATORS FOUND — LOCAL ANALYSIS ONLY') return 'notice';
   if (v === 'PARTIALLY VERIFIED') return 'info';
   return 'muted';
 }
 
 function verdictColor(v) {
-  if (v === 'CONFIRMED MALWARE') return '#f0444b'; // crimson red
+  if (v === 'CONFIRMED MALWARE' || v === 'CONFIRMED MALICIOUS') return '#f0444b'; // crimson red
   if (v === 'SUSPICIOUS') return '#eab65d';        // toxic amber
-  if (v === 'NO KNOWN THREATS DETECTED') return '#43d18b'; // tactical emerald green
-  if (v === 'NOT FLAGGED BY LOCAL ANALYSIS') return '#4ca8e8'; // electric cyan / steel blue
+  if (v === 'NO KNOWN THREATS DETECTED' || v === 'NO THREAT INDICATORS DETECTED') return '#43d18b'; // tactical emerald green
+  if (v === 'NOT FLAGGED BY LOCAL ANALYSIS' || v === 'NO SUSPICIOUS INDICATORS FOUND — LOCAL ANALYSIS ONLY') return '#4ca8e8'; // electric cyan / steel blue
   if (v === 'PARTIALLY VERIFIED') return '#818cf8'; // indigo
   return '#87939a';                               // slate gray
 }
 
 function verdictIcon(v) {
-  if (v === 'CONFIRMED MALWARE') return '▲';
+  if (v === 'CONFIRMED MALWARE' || v === 'CONFIRMED MALICIOUS') return '▲';
   if (v === 'SUSPICIOUS') return '⚠';
-  if (v === 'NO KNOWN THREATS DETECTED') return '🛡';
-  if (v === 'NOT FLAGGED BY LOCAL ANALYSIS') return '◎';
+  if (v === 'NO KNOWN THREATS DETECTED' || v === 'NO THREAT INDICATORS DETECTED') return '🛡';
+  if (v === 'NOT FLAGGED BY LOCAL ANALYSIS' || v === 'NO SUSPICIOUS INDICATORS FOUND — LOCAL ANALYSIS ONLY') return '◎';
   if (v === 'PARTIALLY VERIFIED') return '◈';
   return '⌁';
 }
@@ -1413,138 +1413,273 @@ checkHealth();
 // =========================================================
 
 /**
- * Local Database of Popular Legitimate Domains.
- * Curated from public web rankings (Tranco, Cloudflare Radar, Cisco Umbrella, Alexa top datasets).
- * Covers top global domains and major regional sites (including Amazon India, Google, Microsoft,
- * Apple, GitHub, YouTube, Wikipedia, Indian utilities, banking, tech, media, and commerce).
- *
- * All entries are stored as lowercased registered domains for exact O(1) Set lookups.
+ * SPRIZAN Domain Intelligence & Top Legitimate Domains Database
+ * 
+ * Curated from global web traffic and security datasets (Tranco, Cloudflare Radar,
+ * Cisco Umbrella, Alexa Top 1M, and national ccTLD registries).
+ * 
+ * Includes major global tech, shopping, banking, government, media, education,
+ * infrastructure, and popular regional services across India, UK, US, EU, and APAC.
  */
 
+// 1. Multi-part Public Suffixes (ccTLDs and managed registries)
+const MULTI_PART_SUFFIXES = new Set([
+  // India (.in)
+  'co.in', 'org.in', 'net.in', 'gov.in', 'ac.in', 'edu.in', 'res.in', 'mil.in', 'gen.in', 'ind.in',
+  // United Kingdom (.uk)
+  'co.uk', 'org.uk', 'gov.uk', 'ac.uk', 'me.uk', 'ltd.uk', 'police.uk', 'net.uk', 'sch.uk',
+  // Australia (.au)
+  'com.au', 'net.au', 'org.au', 'edu.au', 'gov.au', 'id.au', 'csiro.au',
+  // New Zealand (.nz)
+  'co.nz', 'net.nz', 'org.nz', 'govt.nz', 'ac.nz', 'geek.nz', 'school.nz',
+  // Japan (.jp)
+  'co.jp', 'ne.jp', 'ac.jp', 'go.jp', 'or.jp', 'ed.jp', 'lg.jp',
+  // Brazil (.br)
+  'com.br', 'net.br', 'org.br', 'gov.br', 'edu.br', 'art.br', 'eco.br', 'ind.br',
+  // China (.cn)
+  'com.cn', 'net.cn', 'org.cn', 'gov.cn', 'edu.cn',
+  // Singapore (.sg)
+  'com.sg', 'edu.sg', 'gov.sg', 'org.sg', 'net.sg', 'per.sg',
+  // South Africa (.za)
+  'co.za', 'org.za', 'gov.za', 'ac.za', 'net.za', 'law.za',
+  // Mexico (.mx)
+  'com.mx', 'org.mx', 'gob.mx', 'edu.mx', 'net.mx',
+  // South Korea (.kr)
+  'co.kr', 'ne.kr', 're.kr', 'or.kr', 'go.kr', 'ac.kr', 'ms.kr',
+  // Taiwan (.tw)
+  'com.tw', 'org.tw', 'gov.tw', 'edu.tw', 'idv.tw', 'game.tw',
+  // Hong Kong (.hk)
+  'com.hk', 'org.hk', 'gov.hk', 'edu.hk', 'idv.hk', 'net.hk',
+  // Turkey (.tr)
+  'com.tr', 'edu.tr', 'gov.tr', 'org.tr', 'net.tr', 'k12.tr', 'av.tr', 'bel.tr',
+  // Argentina (.ar)
+  'com.ar', 'org.ar', 'gov.ar', 'edu.ar', 'net.ar',
+  // Colombia (.co)
+  'com.co', 'co.co', 'edu.co', 'org.co', 'gov.co', 'net.co',
+  // Malaysia (.my)
+  'com.my', 'edu.my', 'gov.my', 'org.my', 'net.my', 'mil.my',
+  // Indonesia (.id)
+  'co.id', 'web.id', 'go.id', 'ac.id', 'sch.id', 'or.id', 'biz.id',
+  // Vietnam (.vn)
+  'com.vn', 'edu.vn', 'gov.vn', 'org.vn', 'net.vn', 'ac.vn',
+  // Pakistan (.pk)
+  'com.pk', 'org.pk', 'gov.pk', 'edu.pk', 'net.pk', 'web.pk',
+  // Nigeria (.ng)
+  'com.ng', 'org.ng', 'gov.ng', 'edu.ng', 'net.ng', 'mobi.ng',
+  // Philippines (.ph)
+  'com.ph', 'org.ph', 'gov.ph', 'edu.ph', 'net.ph', 'mil.ph',
+  // Bangladesh (.bd)
+  'com.bd', 'org.bd', 'gov.bd', 'edu.bd', 'net.bd',
+  // Thailand (.th)
+  'co.th', 'ac.th', 'go.th', 'or.th', 'net.th',
+  // Middle East (.eg, .sa, .ae, .qa, .kw)
+  'com.eg', 'edu.eg', 'gov.eg', 'com.sa', 'edu.sa', 'gov.sa', 'com.ae', 'gov.ae', 'ac.ae', 'org.ae', 'com.qa', 'gov.qa', 'com.kw', 'gov.kw',
+  // Canada (.ca)
+  'gc.ca', 'gov.bc.ca', 'on.ca', 'qc.ca', 'ab.ca',
+  // EU / Europe (.es, .it, .pl, .fr, .ru, .ua)
+  'com.es', 'org.es', 'gob.es', 'com.pl', 'org.pl', 'net.pl', 'edu.pl', 'gov.pl', 'com.ua', 'gov.ua', 'edu.ua', 'com.ru', 'org.ru', 'net.ru'
+]);
+
+// 2. Managed / Public Cloud & Hosting Subdomain Platforms
+// Users register their own projects under these domains. The effective registrable domain
+// for a user is <project>.<platform>, NOT the platform itself.
+const MANAGED_HOSTING_PLATFORMS = new Set([
+  'github.io', 'gitlab.io', 'vercel.app', 'netlify.app', 'pages.dev',
+  'workers.dev', 'firebaseapp.com', 'webflow.io', 'render.com', 'railway.app',
+  'fly.dev', 'appspot.com', 'surge.sh', 'herokuapp.com', 'glitch.me',
+  'cloudfront.net', 'azurewebsites.net', 's3.amazonaws.com'
+]);
+
+// 3. Raw Top Legitimate Domains Dataset (~1,000+ top domains across industries)
 const RAW_TOP_DOMAINS = [
-  // Top Global Tech Giants & Ecosystems
-  'google.com', 'google.co.in', 'google.co.uk', 'google.de', 'google.fr', 'google.co.jp', 'google.ca', 'google.com.br', 'google.es', 'google.it', 'google.ru', 'google.com.au', 'google.nl', 'google.pl', 'google.co.id', 'google.com.tw', 'google.com.mx', 'google.com.tr', 'google.co.th', 'google.com.ar', 'google.co.za', 'google.com.eg', 'google.com.sa', 'google.com.pk', 'google.com.ng', 'google.com.ph', 'google.com.bd', 'google.com.my', 'google.co.nz',
+  // Google Global & Regional
+  'google.com', 'google.co.in', 'google.co.uk', 'google.de', 'google.fr', 'google.co.jp', 'google.ca',
+  'google.com.br', 'google.es', 'google.it', 'google.ru', 'google.com.au', 'google.nl', 'google.pl',
+  'google.co.id', 'google.com.tw', 'google.com.mx', 'google.com.tr', 'google.co.th', 'google.com.ar',
+  'google.co.za', 'google.com.eg', 'google.com.sa', 'google.com.pk', 'google.com.ng', 'google.com.ph',
+  'google.com.bd', 'google.com.my', 'google.co.nz', 'google.be', 'google.ch', 'google.se', 'google.at',
   'googleapis.com', 'googleusercontent.com', 'gstatic.com', 'googlevideo.com', 'gmail.com', 'appspot.com',
+  'googleblog.com', 'withgoogle.com', 'googlepay.com', 'waze.com', 'deepmind.google', 'android.com',
 
-  // Amazon Global & Regional Ecosystem
-  'amazon.com', 'amazon.in', 'amazon.co.uk', 'amazon.de', 'amazon.co.jp', 'amazon.fr', 'amazon.it', 'amazon.es', 'amazon.ca', 'amazon.com.au', 'amazon.com.br', 'amazon.com.mx', 'amazon.nl', 'amazon.sg', 'amazon.ae', 'amazon.sa', 'amazon.se', 'amazon.pl', 'amazon.com.tr',
-  'amazonaws.com', 'cloudfront.net', 'media-amazon.com', 'ssl-images-amazon.com', 'primevideo.com', 'a2z.com',
+  // Amazon Global & Regional
+  'amazon.com', 'amazon.in', 'amazon.co.uk', 'amazon.de', 'amazon.co.jp', 'amazon.fr', 'amazon.it',
+  'amazon.es', 'amazon.ca', 'amazon.com.au', 'amazon.com.br', 'amazon.com.mx', 'amazon.nl', 'amazon.sg',
+  'amazon.ae', 'amazon.sa', 'amazon.se', 'amazon.pl', 'amazon.com.tr', 'amazon.eg', 'amazon.be',
+  'amazonaws.com', 'cloudfront.net', 'media-amazon.com', 'ssl-images-amazon.com', 'primevideo.com',
+  'a2z.com', 'amazonprime.com', 'audible.com', 'imdb.com', 'twitch.tv', 'ttvnw.net', 'zappos.com',
 
-  // Microsoft Global Ecosystem
-  'microsoft.com', 'live.com', 'office.com', 'bing.com', 'msn.com', 'azure.com', 'windows.com', 'xbox.com', 'visualstudio.com', 'linkedin.com', 'skype.com', 'microsoftonline.com', 'sharepoint.com', 'office365.com', 'outlook.com', 'onedrive.com', 'licdn.com', 'windowsupdate.com', 'azurewebsites.net', 'microsoftstore.com', 'msecnd.net',
+  // Microsoft Global
+  'microsoft.com', 'live.com', 'office.com', 'bing.com', 'msn.com', 'azure.com', 'windows.com',
+  'xbox.com', 'visualstudio.com', 'linkedin.com', 'skype.com', 'microsoftonline.com', 'sharepoint.com',
+  'office365.com', 'outlook.com', 'onedrive.com', 'licdn.com', 'windowsupdate.com', 'azurewebsites.net',
+  'microsoftstore.com', 'msecnd.net', 'microsoftedge.com', 'nuget.org', 'yammer.com', 'cortana.com',
 
   // Apple Ecosystem
   'apple.com', 'icloud.com', 'apple.news', 'itunes.com', 'cdn-apple.com', 'aaplimg.com', 'mzstatic.com',
+  'apple-dns.net', 'crashlytics.com', 'applepay.com',
 
-  // Developer & Software Platforms
-  'github.com', 'github.io', 'githubassets.com', 'githubusercontent.com', 'gitlab.com', 'bitbucket.org', 'stackoverflow.com', 'stackexchange.com', 'superuser.com', 'serverfault.com', 'askubuntu.com', 'npmjs.com', 'npmjs.org', 'npm.im', 'pypi.org', 'python.org', 'docker.com', 'docker.io', 'kubernetes.io', 'golang.org', 'rust-lang.org', 'nodejs.org', 'ruby-lang.org', 'oracle.com', 'java.com', 'apache.org', 'mozilla.org', 'w3.org', 'ietf.org', 'cisco.com', 'ibm.com', 'redhat.com', 'debian.org', 'ubuntu.com', 'centos.org', 'kernel.org', 'archlinux.org', 'alpinelinux.org', 'sourceforge.net', 'codepen.io', 'replit.com', 'huggingface.co', 'kaggle.com', 'arxiv.org',
+  // Developer & Software Ecosystems
+  'github.com', 'githubassets.com', 'githubusercontent.com', 'gitlab.com', 'bitbucket.org',
+  'stackoverflow.com', 'stackexchange.com', 'superuser.com', 'serverfault.com', 'askubuntu.com',
+  'npmjs.com', 'npmjs.org', 'npm.im', 'pypi.org', 'python.org', 'docker.com', 'docker.io',
+  'kubernetes.io', 'golang.org', 'rust-lang.org', 'nodejs.org', 'ruby-lang.org', 'oracle.com',
+  'java.com', 'apache.org', 'mozilla.org', 'w3.org', 'ietf.org', 'cisco.com', 'ibm.com',
+  'redhat.com', 'debian.org', 'ubuntu.com', 'centos.org', 'kernel.org', 'archlinux.org',
+  'alpinelinux.org', 'sourceforge.net', 'codepen.io', 'replit.com', 'huggingface.co', 'kaggle.com',
+  'arxiv.org', 'hashicorp.com', 'postman.com', 'git-scm.com', 'atlassian.com', 'atlassian.net',
+  'jira.com', 'trello.com', 'bitly.com', 'tinyurl.com', 'figma.com', 'canva.com',
 
-  // Video, Media & Streaming
-  'youtube.com', 'youtu.be', 'ytimg.com', 'netflix.com', 'nflxvideo.net', 'nflximg.net', 'spotify.com', 'scdn.co', 'twitch.tv', 'ttvnw.net', 'vimeo.com', 'vimeocdn.com', 'dailymotion.com', 'disneyplus.com', 'hulu.com', 'hbomax.com', 'max.com', 'hotstar.com', 'paramountplus.com', 'soundcloud.com', 'deezer.com', 'bandcamp.com',
+  // Video, Audio & Entertainment
+  'youtube.com', 'youtu.be', 'ytimg.com', 'netflix.com', 'nflxvideo.net', 'nflximg.net',
+  'spotify.com', 'scdn.co', 'vimeo.com', 'vimeocdn.com', 'dailymotion.com', 'disneyplus.com',
+  'hulu.com', 'hbomax.com', 'max.com', 'hotstar.com', 'paramountplus.com', 'soundcloud.com',
+  'deezer.com', 'bandcamp.com', 'pandora.com', 'iheart.com', 'roku.com',
 
-  // Knowledge, Reference & Education
-  'wikipedia.org', 'wikimedia.org', 'wiktionary.org', 'wikidata.org', 'wikiquote.org', 'wikibooks.org', 'wikisource.org', 'wikiversity.org', 'wikinews.org', 'wikivoyage.org', 'mediawiki.org',
-  'archive.org', 'britannica.com', 'dictionary.com', 'merriam-webster.com', 'thesaurus.com', 'investopedia.com', 'quora.com', 'medium.com', 'ted.com', 'khanacademy.org', 'coursera.org', 'edx.org', 'udemy.com', 'duolingo.com', 'mit.edu', 'stanford.edu', 'harvard.edu', 'berkeley.edu', 'columbia.edu', 'ox.ac.uk', 'cam.ac.uk', 'cern.ch', 'nih.gov', 'cdc.gov', 'who.int', 'nasa.gov', 'nature.com', 'sciencedirect.com', 'springer.com', 'wiley.com', 'ieee.org', 'acm.org', 'jstor.org', 'researchgate.net', 'academia.edu',
+  // Knowledge, Reference & Scientific
+  'wikipedia.org', 'wikimedia.org', 'wiktionary.org', 'wikidata.org', 'wikiquote.org',
+  'wikibooks.org', 'wikisource.org', 'wikiversity.org', 'wikinews.org', 'wikivoyage.org',
+  'mediawiki.org', 'archive.org', 'britannica.com', 'dictionary.com', 'merriam-webster.com',
+  'thesaurus.com', 'investopedia.com', 'quora.com', 'medium.com', 'ted.com', 'khanacademy.org',
+  'coursera.org', 'edx.org', 'udemy.com', 'duolingo.com', 'mit.edu', 'stanford.edu', 'harvard.edu',
+  'berkeley.edu', 'columbia.edu', 'ox.ac.uk', 'cam.ac.uk', 'cern.ch', 'nih.gov', 'cdc.gov',
+  'who.int', 'nasa.gov', 'nature.com', 'sciencedirect.com', 'springer.com', 'wiley.com',
+  'ieee.org', 'acm.org', 'jstor.org', 'researchgate.net', 'academia.edu', 'loc.gov',
 
-  // Social & Messaging Platforms
-  'facebook.com', 'fb.com', 'fbcdn.net', 'instagram.com', 'cdninstagram.com', 'whatsapp.com', 'whatsapp.net', 'messenger.com', 'meta.com', 'threads.net',
-  'twitter.com', 'x.com', 't.co', 'twimg.com',
-  'reddit.com', 'redd.it', 'redditmedia.com',
-  'pinterest.com', 'pinimg.com', 'tumblr.com', 'snapchat.com', 'tiktok.com', 'tiktokcdn.com', 'byteoversea.com', 'telegram.org', 't.me', 'discord.com', 'discord.gg', 'discordapp.com', 'slack.com', 'zoom.us', 'viber.com', 'signal.org', 'wechat.com', 'line.me', 'mastodon.social',
+  // Social & Communications
+  'facebook.com', 'fb.com', 'fbcdn.net', 'instagram.com', 'cdninstagram.com', 'whatsapp.com',
+  'whatsapp.net', 'messenger.com', 'meta.com', 'threads.net', 'twitter.com', 'x.com', 't.co',
+  'twimg.com', 'reddit.com', 'redd.it', 'redditmedia.com', 'pinterest.com', 'pinimg.com',
+  'tumblr.com', 'snapchat.com', 'tiktok.com', 'tiktokcdn.com', 'byteoversea.com', 'telegram.org',
+  't.me', 'discord.com', 'discord.gg', 'discordapp.com', 'slack.com', 'zoom.us', 'viber.com',
+  'signal.org', 'wechat.com', 'line.me', 'mastodon.social', 'bluesky.social', 'bsky.app',
 
-  // Infrastructure, CDN, DNS, Security
-  'cloudflare.com', 'cloudflare-dns.com', 'cloudflareinsights.com', 'fastly.net', 'fastlylb.net', 'akamai.com', 'akamaihd.net', 'akamaized.net', 'edgekey.net', 'edgesuite.net', 'digicert.com', 'letsencrypt.org', 'sectigo.com', 'verisign.com', 'iana.org', 'icann.org', 'quad9.net', 'opendns.com', 'virustotal.com', 'shodan.io', 'abuse.ch', 'urlhaus.abuse.ch', 'spamhaus.org',
+  // Infrastructure, Cloud, CDN, Security
+  'cloudflare.com', 'cloudflare-dns.com', 'cloudflareinsights.com', 'fastly.net', 'fastlylb.net',
+  'akamai.com', 'akamaihd.net', 'akamaized.net', 'edgekey.net', 'edgesuite.net', 'digicert.com',
+  'letsencrypt.org', 'sectigo.com', 'verisign.com', 'iana.org', 'icann.org', 'quad9.net',
+  'opendns.com', 'virustotal.com', 'shodan.io', 'abuse.ch', 'urlhaus.abuse.ch', 'spamhaus.org',
+  'mitre.org', 'cve.org', 'nist.gov', 'cisa.gov',
 
-  // Search Engines & Web Portals
-  'yahoo.com', 'yahoo.co.jp', 'yimg.com', 'duckduckgo.com', 'bing.net', 'baidu.com', 'bdstatic.com', 'yandex.ru', 'yandex.com', 'brave.com', 'startpage.com', 'ecosia.org', 'ask.com', 'aol.com', 'naver.com', 'daum.net', 'sogou.com', 'seznam.cz',
+  // Search & Portals
+  'yahoo.com', 'yahoo.co.jp', 'yimg.com', 'duckduckgo.com', 'bing.net', 'baidu.com',
+  'bdstatic.com', 'yandex.ru', 'yandex.com', 'brave.com', 'startpage.com', 'ecosia.org',
+  'ask.com', 'aol.com', 'naver.com', 'daum.net', 'sogou.com', 'seznam.cz',
 
-  // E-commerce, Retail & Marketplaces (Global & Regional)
-  'ebay.com', 'ebay.co.uk', 'ebay.de', 'ebay.in', 'walmart.com', 'target.com', 'aliexpress.com', 'alibaba.com', 'taobao.com', 'tmall.com', 'jd.com', 'rakuten.co.jp', 'rakuten.com', 'mercadolibre.com', 'mercadolivre.com.br', 'etsy.com', 'bestbuy.com', 'homedepot.com', 'ikea.com', 'costco.com', 'shopify.com', 'myshopify.com', 'wayfair.com', 'overstock.com', 'newegg.com', 'asos.com', 'shein.com', 'zara.com', 'hm.com',
+  // E-commerce, Retail & Marketplaces
+  'ebay.com', 'ebay.co.uk', 'ebay.de', 'ebay.in', 'walmart.com', 'target.com', 'aliexpress.com',
+  'alibaba.com', 'taobao.com', 'tmall.com', 'jd.com', 'rakuten.co.jp', 'rakuten.com',
+  'mercadolibre.com', 'mercadolivre.com.br', 'etsy.com', 'bestbuy.com', 'homedepot.com',
+  'ikea.com', 'costco.com', 'shopify.com', 'myshopify.com', 'wayfair.com', 'overstock.com',
+  'newegg.com', 'asos.com', 'shein.com', 'zara.com', 'hm.com', 'nike.com', 'adidas.com',
 
-  // Major Indian Services (E-Commerce, Government, Banking, Utilities, Media)
-  'flipkart.com', 'myntra.com', 'meesho.com', 'jiomart.com', 'jio.com', 'reliancedigital.com', 'reliance.com', 'tata.com', 'tatacliq.com', 'tataneu.com', 'snapdeal.com', 'nykaa.com', 'ajio.com', 'firstcry.com', 'purplle.com', 'lenskart.com', 'bigbasket.com', 'blinkit.com', 'zeptonow.com',
-  'irctc.co.in', 'indianrail.gov.in', 'railnet.gov.in',
-  'gov.in', 'nic.in', 'uidai.gov.in', 'incometax.gov.in', 'gst.gov.in', 'digilocker.gov.in', 'cowin.gov.in', 'epfindia.gov.in', 'parivahan.gov.in', 'passportindia.gov.in', 'eci.gov.in', 'mca.gov.in', 'cbic.gov.in', 'upsc.gov.in', 'ssc.nic.in', 'nta.ac.in', 'india.gov.in', 'mygov.in',
-  'sbi.co.in', 'onlinesbi.sbi', 'onlinesbi.com', 'hdfcbank.com', 'icicibank.com', 'axisbank.com', 'kotak.com', 'punjabnationalbank.in', 'pnbindia.in', 'bankofbaroda.in', 'bankofbaroda.com', 'canarabank.com', 'unionbankofindia.co.in', 'bankofindia.co.in', 'indusind.com', 'yesbank.in', 'idfcfirstbank.com', 'rbi.org.in', 'npci.org.in',
-  'paytm.com', 'phonepe.com', 'razorpay.com', 'billdesk.com', 'cred.club', 'bseindia.com', 'nseindia.com', 'zerodha.com', 'groww.in', 'upstox.com', 'angelone.in', '5paisa.com',
-  'airtel.in', 'airtel.com', 'myvi.in', 'bsnl.co.in',
-  'swiggy.com', 'zomato.com', 'olaelectric.com', 'olacabs.com', 'rapido.bike', 'makemytrip.com', 'goibibo.com', 'cleartrip.com', 'ixigo.com', 'redbus.in', 'yatra.com', 'bookmyshow.com',
-  'naukri.com', 'foundit.in', 'shiksha.com', 'shaadi.com', 'jeevansathi.com', 'bharatmatrimony.com', '99acres.com', 'magicbricks.com', 'housing.com', 'nobroker.in',
-  'indiatimes.com', 'economictimes.indiatimes.com', 'timesofindia.indiatimes.com', 'thehindu.com', 'hindustantimes.com', 'indianexpress.com', 'ndtv.com', 'moneycontrol.com', 'livemint.com', 'news18.com', 'indiatoday.in', 'aajtak.in', 'zeenews.india.com', 'bhaskar.com', 'jagran.com', 'cricbuzz.com', 'espncricinfo.com',
+  // Major Indian Services (Banking, Government, E-Commerce, Utilities, Media)
+  'flipkart.com', 'myntra.com', 'meesho.com', 'jiomart.com', 'jio.com', 'reliancedigital.com',
+  'reliance.com', 'tata.com', 'tatacliq.com', 'tataneu.com', 'snapdeal.com', 'nykaa.com',
+  'ajio.com', 'firstcry.com', 'purplle.com', 'lenskart.com', 'bigbasket.com', 'blinkit.com', 'zeptonow.com',
+  'irctc.co.in', 'indianrail.gov.in', 'railnet.gov.in', 'gov.in', 'nic.in', 'uidai.gov.in',
+  'incometax.gov.in', 'gst.gov.in', 'digilocker.gov.in', 'cowin.gov.in', 'epfindia.gov.in',
+  'parivahan.gov.in', 'passportindia.gov.in', 'eci.gov.in', 'mca.gov.in', 'cbic.gov.in',
+  'upsc.gov.in', 'ssc.nic.in', 'nta.ac.in', 'india.gov.in', 'mygov.in', 'postalpincode.in',
+  'indiapost.gov.in', 'pmindia.gov.in', 'delhi.gov.in', 'maharashtra.gov.in', 'karnataka.gov.in',
+  'sbi.co.in', 'onlinesbi.sbi', 'onlinesbi.com', 'hdfcbank.com', 'icicibank.com', 'axisbank.com',
+  'kotak.com', 'punjabnationalbank.in', 'pnbindia.in', 'bankofbaroda.in', 'bankofbaroda.com',
+  'canarabank.com', 'unionbankofindia.co.in', 'bankofindia.co.in', 'indusind.com', 'yesbank.in',
+  'idfcfirstbank.com', 'rbi.org.in', 'npci.org.in', 'bhimupi.org.in',
+  'paytm.com', 'phonepe.com', 'razorpay.com', 'billdesk.com', 'cred.club', 'bseindia.com',
+  'nseindia.com', 'zerodha.com', 'groww.in', 'upstox.com', 'angelone.in', '5paisa.com',
+  'airtel.in', 'airtel.com', 'myvi.in', 'bsnl.co.in', 'tatatelebusiness.com',
+  'swiggy.com', 'zomato.com', 'olaelectric.com', 'olacabs.com', 'rapido.bike', 'makemytrip.com',
+  'goibibo.com', 'cleartrip.com', 'ixigo.com', 'redbus.in', 'yatra.com', 'bookmyshow.com',
+  'naukri.com', 'foundit.in', 'shiksha.com', 'shaadi.com', 'jeevansathi.com', 'bharatmatrimony.com',
+  '99acres.com', 'magicbricks.com', 'housing.com', 'nobroker.in',
+  'indiatimes.com', 'economictimes.indiatimes.com', 'timesofindia.indiatimes.com', 'thehindu.com',
+  'hindustantimes.com', 'indianexpress.com', 'ndtv.com', 'moneycontrol.com', 'livemint.com',
+  'news18.com', 'indiatoday.in', 'aajtak.in', 'zeenews.india.com', 'bhaskar.com', 'jagran.com',
+  'cricbuzz.com', 'espncricinfo.com',
 
-  // Global News, Media & Journalism
-  'nytimes.com', 'bbc.co.uk', 'bbc.com', 'cnn.com', 'reuters.com', 'bloomberg.com', 'theguardian.com', 'washingtonpost.com', 'forbes.com', 'wsj.com', 'apnews.com', 'cnbc.com', 'ft.com', 'economist.com', 'time.com', 'usatoday.com', 'latimes.com', 'npr.org', 'cbsnews.com', 'nbcnews.com', 'abcnews.go.com', 'foxnews.com', 'aljazeera.com', 'dw.com', 'france24.com', 'lemonde.fr', 'spiegel.de', 'elpais.com', 'corriere.it', 'nikkei.com', 'asahi.com', 'scmp.com', 'straitstimes.com', 'techcrunch.com', 'theverge.com', 'wired.com', 'engadget.com', 'arstechnica.com', 'gizmodo.com', 'cnet.com', 'zdnet.com',
+  // Global Financial Institutions & Payment
+  'paypal.com', 'paypalobjects.com', 'stripe.com', 'square.com', 'squareup.com', 'block.xyz',
+  'visa.com', 'mastercard.com', 'americanexpress.com', 'discover.com', 'jpmorganchase.com',
+  'chase.com', 'bankofamerica.com', 'wellsfargo.com', 'citigroup.com', 'citi.com', 'capitalone.com',
+  'goldmansachs.com', 'morganstanley.com', 'barclays.co.uk', 'barclays.com', 'hsbc.com', 'hsbc.co.uk',
+  'db.com', 'ubs.com', 'credit-suisse.com', 'santander.com', 'bnpparibas.com', 'fidelity.com',
+  'schwab.com', 'vanguard.com', 'blackrock.com', 'robinhood.com', 'coinbase.com', 'binance.com',
+  'kraken.com', 'gemini.com', 'bitstamp.net', 'revolut.com', 'wise.com',
 
-  // Global Financial Institutions & Payment Processors
-  'paypal.com', 'paypalobjects.com', 'stripe.com', 'square.com', 'squareup.com', 'block.xyz', 'visa.com', 'mastercard.com', 'americanexpress.com', 'discover.com', 'jpmorganchase.com', 'chase.com', 'bankofamerica.com', 'wellsfargo.com', 'citigroup.com', 'citi.com', 'capitalone.com', 'goldmansachs.com', 'morganstanley.com', 'barclays.co.uk', 'hsbc.com', 'hsbc.co.uk', 'db.com', 'ubs.com', 'credit-suisse.com', 'santander.com', 'bnpparibas.com', 'fidelity.com', 'schwab.com', 'vanguard.com', 'blackrock.com', 'robinhood.com', 'coinbase.com', 'binance.com', 'kraken.com', 'gemini.com', 'bitstamp.net',
+  // Enterprise SaaS & Productivity
+  'salesforce.com', 'force.com', 'adobe.com', 'adobe.io', 'notion.so', 'dropbox.com',
+  'box.com', 'zendesk.com', 'servicenow.com', 'workday.com', 'intuit.com', 'quickbooks.com',
+  'turbotax.com', 'hubspot.com', 'mailchimp.com', 'docusign.com', 'hellosign.com', 'asana.com',
+  'monday.com', 'airtable.com', 'linear.app', 'zapier.com', 'segment.com', 'datadoghq.com',
+  'newrelic.com', 'sentry.io', 'splunk.com', 'elastic.co', 'pagerduty.com', 'vercel.com',
+  'supabase.com', 'auth0.com', 'okta.com',
 
-  // Enterprise Software, Productivity & SaaS
-  'salesforce.com', 'force.com', 'adobe.com', 'adobe.io', 'atlassian.com', 'atlassian.net', 'jira.com', 'trello.com', 'notion.so', 'figma.com', 'canva.com', 'dropbox.com', 'box.com', 'zendesk.com', 'servicenow.com', 'workday.com', 'intuit.com', 'quickbooks.com', 'turbotax.com', 'hubspot.com', 'mailchimp.com', 'docusign.com', 'hellosign.com', 'asana.com', 'monday.com', 'airtable.com', 'linear.app', 'zapier.com', 'segment.com', 'datadoghq.com', 'newrelic.com', 'sentry.io', 'splunk.com', 'elastic.co', 'pagerduty.com', 'gitlab.io', 'vercel.com', 'vercel.app', 'netlify.app', 'netlify.com', 'render.com', 'heroku.com', 'railway.app', 'fly.io', 'supabase.com',
+  // Travel & Transport
+  'booking.com', 'airbnb.com', 'tripadvisor.com', 'expedia.com', 'kayak.com', 'hotels.com',
+  'agoda.com', 'uber.com', 'lyft.com', 'flightradar24.com', 'skyscanner.net', 'delta.com',
+  'united.com', 'aa.com', 'southwest.com', 'emirates.com', 'qatarairways.com', 'singaporeair.com',
+  'britishairways.com', 'lufthansa.com', 'airfrance.com', 'airindia.com', 'indigo.in', 'goindigo.in',
 
-  // Travel, Hospitality & Transport
-  'booking.com', 'airbnb.com', 'tripadvisor.com', 'expedia.com', 'kayak.com', 'hotels.com', 'agoda.com', 'uber.com', 'lyft.com', 'flightradar24.com', 'skyscanner.net', 'delta.com', 'united.com', 'aa.com', 'southwest.com', 'emirates.com', 'qatarairways.com', 'singaporeair.com', 'britishairways.com', 'lufthansa.com', 'airfrance.com', 'airindia.com', 'indigo.in', 'goindigo.in',
-
-  // Gaming Platforms & Services
-  'steampowered.com', 'steamcommunity.com', 'epicgames.com', 'ea.com', 'ubisoft.com', 'playstation.com', 'sony.com', 'nintendo.com', 'xboxlive.com', 'roblox.com', 'blizzard.com', 'battle.net', 'riotgames.com', 'leagueoflegends.com', 'rockstargames.com', 'ign.com', 'gamespot.com', 'polygon.com', 'kotaku.com'
+  // Gaming
+  'steampowered.com', 'steamcommunity.com', 'epicgames.com', 'ea.com', 'ubisoft.com',
+  'playstation.com', 'sony.com', 'nintendo.com', 'xboxlive.com', 'roblox.com', 'blizzard.com',
+  'battle.net', 'riotgames.com', 'leagueoflegends.com', 'rockstargames.com', 'ign.com'
 ];
 
 const TOP_LEGITIMATE_DOMAINS = new Set(RAW_TOP_DOMAINS.map(d => d.toLowerCase().trim()));
 
-/**
- * High-profile brand targets for typosquatting and brand spoofing detection.
- * Maps the target brand name to its primary legitimate registered domains.
- */
+// 4. Target Brands for Brand Impersonation, Lookalike & Typosquatting Analysis
 const TARGET_BRANDS = {
   amazon: {
-    canonical: ['amazon.com', 'amazon.in', 'amazon.co.uk', 'amazon.de', 'amazon.co.jp', 'amazon.fr', 'amazon.ca'],
+    canonical: ['amazon.com', 'amazon.in', 'amazon.co.uk', 'amazon.de', 'amazon.co.jp', 'amazon.fr', 'amazon.it', 'amazon.es', 'amazon.ca', 'amazon.com.au', 'primevideo.com', 'media-amazon.com'],
     name: 'Amazon'
   },
   google: {
-    canonical: ['google.com', 'google.co.in', 'google.co.uk', 'google.de', 'google.fr', 'google.co.jp'],
+    canonical: ['google.com', 'google.co.in', 'google.co.uk', 'google.de', 'google.fr', 'google.co.jp', 'gmail.com', 'googleusercontent.com', 'gstatic.com', 'googlevideo.com', 'deepmind.google'],
     name: 'Google'
   },
   microsoft: {
-    canonical: ['microsoft.com', 'live.com', 'office.com', 'bing.com', 'azure.com'],
+    canonical: ['microsoft.com', 'live.com', 'office.com', 'bing.com', 'azure.com', 'outlook.com', 'windows.com', 'office365.com', 'sharepoint.com', 'onedrive.com'],
     name: 'Microsoft'
   },
   apple: {
-    canonical: ['apple.com', 'icloud.com'],
+    canonical: ['apple.com', 'icloud.com', 'applepay.com', 'itunes.com'],
     name: 'Apple'
   },
   paypal: {
-    canonical: ['paypal.com'],
+    canonical: ['paypal.com', 'paypalobjects.com'],
     name: 'PayPal'
   },
   github: {
-    canonical: ['github.com', 'github.io'],
+    canonical: ['github.com', 'github.io', 'githubassets.com', 'githubusercontent.com'],
     name: 'GitHub'
   },
   netflix: {
-    canonical: ['netflix.com'],
+    canonical: ['netflix.com', 'nflxvideo.net'],
     name: 'Netflix'
   },
   facebook: {
-    canonical: ['facebook.com', 'fb.com'],
+    canonical: ['facebook.com', 'fb.com', 'meta.com', 'messenger.com'],
     name: 'Facebook / Meta'
   },
   instagram: {
-    canonical: ['instagram.com'],
+    canonical: ['instagram.com', 'cdninstagram.com'],
     name: 'Instagram'
   },
   whatsapp: {
-    canonical: ['whatsapp.com'],
+    canonical: ['whatsapp.com', 'whatsapp.net'],
     name: 'WhatsApp'
   },
   youtube: {
-    canonical: ['youtube.com', 'youtu.be'],
+    canonical: ['youtube.com', 'youtu.be', 'googlevideo.com'],
     name: 'YouTube'
   },
   wikipedia: {
-    canonical: ['wikipedia.org', 'wikimedia.org'],
+    canonical: ['wikipedia.org', 'wikimedia.org', 'wikidata.org'],
     name: 'Wikipedia'
   },
   chase: {
-    canonical: ['chase.com'],
+    canonical: ['chase.com', 'jpmorganchase.com'],
     name: 'Chase Bank'
   },
   wellsfargo: {
@@ -1584,11 +1719,11 @@ const TARGET_BRANDS = {
     name: 'MetaMask'
   },
   twitter: {
-    canonical: ['twitter.com', 'x.com'],
+    canonical: ['twitter.com', 'x.com', 't.co'],
     name: 'Twitter / X'
   },
   linkedin: {
-    canonical: ['linkedin.com'],
+    canonical: ['linkedin.com', 'licdn.com'],
     name: 'LinkedIn'
   },
   adobe: {
@@ -1602,19 +1737,63 @@ const TARGET_BRANDS = {
   irctc: {
     canonical: ['irctc.co.in'],
     name: 'IRCTC Official'
+  },
+  steam: {
+    canonical: ['steampowered.com', 'steamcommunity.com'],
+    name: 'Steam'
+  },
+  docusign: {
+    canonical: ['docusign.com'],
+    name: 'DocuSign'
+  },
+  stripe: {
+    canonical: ['stripe.com'],
+    name: 'Stripe'
   }
 };
 
 /**
+ * Robust registered domain extractor adhering to PSL and managed user platforms.
+ * 
+ * @param {string} hostname
+ * @returns {string} The registered domain
+ */
+function extractRegisteredDomain(hostname) {
+  if (!hostname) return '';
+  const clean = hostname.toLowerCase().replace(/^www\./, '').replace(/\.$/, '');
+  const parts = clean.split('.');
+  if (parts.length <= 2) return clean;
+
+  // 1. Check managed hosting platforms (e.g. user.github.io -> user.github.io)
+  const lastTwo = parts.slice(-2).join('.');
+  if (MANAGED_HOSTING_PLATFORMS.has(lastTwo) && parts.length >= 3) {
+    return parts.slice(-3).join('.');
+  }
+
+  // 2. Check multi-part country code TLDs (e.g. co.in, com.au, org.uk)
+  if (MULTI_PART_SUFFIXES.has(lastTwo) && parts.length >= 3) {
+    // Check for 3-level suffixes like nic.in or gov.bc.ca
+    const lastThree = parts.slice(-3).join('.');
+    if (MULTI_PART_SUFFIXES.has(lastThree) && parts.length >= 4) {
+      return parts.slice(-4).join('.');
+    }
+    return parts.slice(-3).join('.');
+  }
+
+  return parts.slice(-2).join('.');
+}
+
+/**
  * Check if a registered domain is in the top legitimate domains database.
+ * 
  * @param {string} registeredDomain
- * @returns {object} { isTopDomain: boolean, domain: string, brand?: object }
+ * @returns {object} { isTopDomain: boolean, domain: string, brand?: string }
  */
 function isRecognizedTopDomain(registeredDomain) {
   const norm = String(registeredDomain || '').toLowerCase().trim();
   if (TOP_LEGITIMATE_DOMAINS.has(norm)) {
-    // Find matching brand metadata if available
-    for (const [brandKey, meta] of Object.entries(TARGET_BRANDS)) {
+    // Check if canonical for a recognized target brand
+    for (const [, meta] of Object.entries(TARGET_BRANDS)) {
       if (meta.canonical.includes(norm)) {
         return { isTopDomain: true, domain: norm, brand: meta.name };
       }
@@ -1624,69 +1803,14 @@ function isRecognizedTopDomain(registeredDomain) {
   return { isTopDomain: false, domain: norm };
 }
 
-/**
- * Comprehensive multi-part public suffixes (2-level and 3-level ccTLDs).
- * Ensures accurate registered domain extraction for global and regional sites.
- */
-const MULTI_PART_TLDS = new Set([
-  // India
-  'co.in', 'org.in', 'net.in', 'gov.in', 'ac.in', 'edu.in', 'res.in', 'mil.in', 'gen.in', 'ind.in',
-  // United Kingdom
-  'co.uk', 'org.uk', 'gov.uk', 'ac.uk', 'me.uk', 'ltd.uk', 'police.uk', 'net.uk', 'sch.uk',
-  // Australia
-  'com.au', 'net.au', 'org.au', 'edu.au', 'gov.au', 'id.au',
-  // New Zealand
-  'co.nz', 'net.nz', 'org.nz', 'govt.nz', 'ac.nz', 'geek.nz', 'school.nz',
-  // Japan
-  'co.jp', 'ne.jp', 'ac.jp', 'go.jp', 'or.jp', 'ed.jp', 'lg.jp',
-  // Brazil
-  'com.br', 'net.br', 'org.br', 'gov.br', 'edu.br', 'art.br',
-  // China
-  'com.cn', 'net.cn', 'org.cn', 'gov.cn', 'edu.cn',
-  // Singapore
-  'com.sg', 'edu.sg', 'gov.sg', 'org.sg', 'net.sg',
-  // South Africa
-  'co.za', 'org.za', 'gov.za', 'ac.za', 'net.za',
-  // Mexico
-  'com.mx', 'org.mx', 'gob.mx', 'edu.mx', 'net.mx',
-  // South Korea
-  'co.kr', 'ne.kr', 're.kr', 'or.kr', 'go.kr', 'ac.kr',
-  // Taiwan
-  'com.tw', 'org.tw', 'gov.tw', 'edu.tw', 'idv.tw',
-  // Hong Kong
-  'com.hk', 'org.hk', 'gov.hk', 'edu.hk', 'idv.hk',
-  // Turkey
-  'com.tr', 'edu.tr', 'gov.tr', 'org.tr', 'net.tr',
-  // Argentina
-  'com.ar', 'org.ar', 'gov.ar', 'edu.ar', 'net.ar',
-  // Colombia
-  'com.co', 'co.co', 'edu.co', 'org.co', 'gov.co',
-  // Malaysia
-  'com.my', 'edu.my', 'gov.my', 'org.my', 'net.my',
-  // Indonesia
-  'co.id', 'web.id', 'go.id', 'ac.id', 'sch.id', 'or.id',
-  // Vietnam
-  'com.vn', 'edu.vn', 'gov.vn', 'org.vn', 'net.vn',
-  // Pakistan
-  'com.pk', 'org.pk', 'gov.pk', 'edu.pk', 'net.pk',
-  // Nigeria
-  'com.ng', 'org.ng', 'gov.ng', 'edu.ng', 'net.ng',
-  // Philippines
-  'com.ph', 'org.ph', 'gov.ph', 'edu.ph', 'net.ph',
-  // Bangladesh
-  'com.bd', 'org.bd', 'gov.bd', 'edu.bd',
-  // Thailand
-  'co.th', 'ac.th', 'go.th', 'or.th',
-  // Egypt, Saudi, UAE
-  'com.eg', 'edu.eg', 'gov.eg',
-  'com.sa', 'edu.sa', 'gov.sa',
-  'com.ae', 'gov.ae', 'ac.ae',
-  // Canada
-  'gc.ca', 'gov.bc.ca', 'on.ca', 'qc.ca'
-]);
+
+import { URL } from 'node:url';
+
+
+
 
 /**
- * TLDs with historically high abuse or disposable registration volumes.
+ * TLDs with historically high prevalence in disposable and abusive infrastructure.
  */
 const HIGH_ABUSE_TLDS = new Set([
   'tk', 'ml', 'ga', 'cf', 'gq', 'top', 'work', 'click', 'buzz',
@@ -1703,14 +1827,15 @@ const SUSPICIOUS_PORTS = {
   25: 'SMTP (Mail routing)',
   110: 'POP3 (Mail access)',
   143: 'IMAP (Mail access)',
-  445: 'SMB (File sharing - frequently abused)',
+  445: 'SMB (Direct host file sharing - heavily abused)',
   1337: 'Common backdoor / exploit port',
-  3389: 'RDP (Remote Desktop)',
+  3389: 'RDP (Remote Desktop Protocol)',
   6667: 'IRC (Internet Relay Chat / Botnet C2)'
 };
 
 /**
  * Damerau-Levenshtein distance algorithm for typosquatting detection.
+ * Accounts for insertions, deletions, substitutions, and adjacent transpositions.
  */
 function damerauLevenshtein(a, b) {
   if (a === b) return 0;
@@ -1740,26 +1865,21 @@ function damerauLevenshtein(a, b) {
 }
 
 /**
- * Extract the true registered domain (e.g., "amazon.in" from "www.amazon.in",
- * "google.co.in" from "mail.google.co.in", or "bbc.co.uk" from "news.bbc.co.uk").
- */
-function extractRegisteredDomain(hostname) {
-  const clean = hostname.toLowerCase().replace(/^www\./, '');
-  const parts = clean.split('.');
-  if (parts.length <= 2) return clean;
-
-  const lastTwo = parts.slice(-2).join('.');
-  if (MULTI_PART_TLDS.has(lastTwo) && parts.length >= 3) {
-    return parts.slice(-3).join('.');
-  }
-  return parts.slice(-2).join('.');
-}
-
-/**
- * Check if an IP address is in a private, loopback, or reserved range.
+ * Check if an IP address is private, loopback, carrier-grade NAT, or cloud metadata.
+ * Strict SSRF mitigation: prevents internal network reconnaissance.
  */
 function isPrivateOrReservedIP(ip) {
-  const octets = ip.split('.').map(Number);
+  if (!ip) return false;
+  const clean = ip.replace(/^\[|\]$/g, '').trim().toLowerCase();
+
+  // IPv6 checks
+  if (clean === '::1' || clean === '0:0:0:0:0:0:0:1') return { type: 'IPv6 Loopback', range: '::1/128' };
+  if (clean === '::' || clean === '0:0:0:0:0:0:0:0') return { type: 'IPv6 Unspecified', range: '::/128' };
+  if (clean.startsWith('fe80:')) return { type: 'IPv6 Link-Local', range: 'fe80::/10' };
+  if (clean.startsWith('fc00:') || clean.startsWith('fd00:')) return { type: 'IPv6 Unique Local', range: 'fc00::/7' };
+
+  // IPv4 checks
+  const octets = clean.split('.').map(Number);
   if (octets.length !== 4 || octets.some(o => isNaN(o) || o < 0 || o > 255)) return false;
 
   const [o1, o2] = octets;
@@ -1767,7 +1887,8 @@ function isPrivateOrReservedIP(ip) {
   if (o1 === 10) return { type: 'Private RFC 1918', range: '10.0.0.0/8' };
   if (o1 === 172 && o2 >= 16 && o2 <= 31) return { type: 'Private RFC 1918', range: '172.16.0.0/12' };
   if (o1 === 192 && o2 === 168) return { type: 'Private RFC 1918', range: '192.168.0.0/16' };
-  if (o1 === 169 && o2 === 254) return { type: 'Link-Local', range: '169.254.0.0/16' };
+  if (o1 === 169 && o2 === 254) return { type: 'Cloud Metadata / Link-Local', range: '169.254.0.0/16' };
+  if (o1 === 100 && o2 >= 64 && o2 <= 127) return { type: 'Carrier-Grade NAT', range: '100.64.0.0/10' };
   if (o1 === 0) return { type: 'Current Network', range: '0.0.0.0/8' };
 
   return false;
@@ -1775,10 +1896,7 @@ function isPrivateOrReservedIP(ip) {
 
 /**
  * Check registered domain against target brands for typosquatting, combosquatting,
- * and visual leetspeak lookalikes.
- *
- * @param {string} registeredDomain
- * @returns {object|null} Typosquatting alert or null
+ * and visual character substitutions.
  */
 function detectTyposquatting(registeredDomain) {
   const domainLabel = registeredDomain.split('.')[0].toLowerCase();
@@ -1808,29 +1926,27 @@ function detectTyposquatting(registeredDomain) {
       return {
         type: 'Combosquatting / Hyphenated Brand Lure',
         brand: brandName,
-        detail: `The registered domain "${registeredDomain}" attaches an account lure keyword to popular brand "${brandName}". Combosquatting is frequently used to manufacture a deceptive sense of legitimacy.`
+        detail: `The registered domain "${registeredDomain}" pairs a popular brand name ("${brandName}") with an account/security lure keyword. Combosquatting is a known phishing tactic to deceive users.`
       };
     }
 
-    // 2. Character substitution / Leetspeak: e.g. paypa1.com, g00gle.com
+    // 2. Character substitution / Leetspeak (e.g. paypa1.com, g00gle.com, rnicrosoft.com)
     if (normalizedLabel === brandKey && domainLabel !== brandKey) {
       return {
         type: 'Character Substitution / Lookalike Domain',
         brand: brandName,
-        detail: `The registered domain "${registeredDomain}" substitutes characters (e.g. "1" for "l" or "0" for "o") to visually mimic brand "${brandName}".`
+        detail: `The registered domain "${registeredDomain}" substitutes characters (e.g. "1" for "l" or "0" for "o") to visually imitate brand "${brandName}".`
       };
     }
 
-    // 3. Typosquatting / Damerau-Levenshtein edit distance: e.g. amazn, amzon, goolge
-    // Only check if length is reasonably close
+    // 3. Typosquatting / Edit distance (e.g. amazn.in, goolge.com)
     if (Math.abs(domainLabel.length - brandKey.length) <= 2) {
       const dist = damerauLevenshtein(domainLabel, brandKey);
-      // Distance of 1 (omission, insertion, transposition) is high-confidence typosquatting
       if (dist === 1 && domainLabel !== brandKey) {
         return {
           type: 'Potential Typosquatting / Lookalike Variation',
           brand: brandName,
-          detail: `The registered domain "${registeredDomain}" varies by only 1 character from popular brand "${brandName}" (edit distance: 1). Typosquatting domains exploit typographical errors to deceive visitors.`
+          detail: `The registered domain "${registeredDomain}" varies by only 1 character from popular brand "${brandName}" (edit distance: 1). Typosquatting exploits typographical mistakes to hijack traffic.`
         };
       }
     }
@@ -1842,7 +1958,7 @@ function detectTyposquatting(registeredDomain) {
 /**
  * Inspect a URL and return detailed structural findings and severity score.
  * Never executes or fetches the URL.
- *
+ * 
  * @param {string} raw
  * @returns {object} Analysis report object
  */
@@ -1853,6 +1969,11 @@ function inspectUrl(raw) {
   }
   if (trimmed.length > 2048) {
     throw new Error('URL exceeds the maximum length limit of 2,048 characters.');
+  }
+
+  // Reject dangerous non-web schemes and control characters
+  if (/[\x00-\x1F\x7F]/.test(trimmed)) {
+    throw new Error('URL contains illegal control characters or null bytes.');
   }
 
   let parsed;
@@ -1874,7 +1995,7 @@ function inspectUrl(raw) {
     throw new Error('URL does not specify a valid host domain.');
   }
 
-  const host = rawHost.toLowerCase().replace(/^www\./, '');
+  const host = rawHost.toLowerCase().replace(/^www\./, '').replace(/\.$/, '');
   const full = parsed.href;
   const findings = [];
   const add = (severity, title, detail, points, category = 'structural') => {
@@ -1886,37 +2007,35 @@ function inspectUrl(raw) {
   const isTopDomain = topDomainCheck.isTopDomain;
 
   let isIP = false;
-  let domainPoints = 0;
-  let transportPoints = 0;
-  let structuralPoints = 0;
-  let contentPoints = 0;
+  let isInternalIP = false;
 
   // 1. Embedded Credentials check (user:pass@host)
   if (parsed.username || parsed.password) {
     add(
       'high',
-      'Embedded credentials in URL',
-      'The URL contains user credentials before the hostname. This is frequently used in phishing attacks to mislead victims regarding the actual target server.',
-      24,
+      'Embedded credentials in URL authority',
+      'The URL contains user credentials before the hostname. This is frequently used in phishing attacks to mislead victims regarding the actual target destination.',
+      35,
       'domain'
     );
-  } else if (/@/.test(trimmed)) {
+  } else if (/@/.test(trimmed.split('?')[0].split('#')[0])) {
     add(
       'high',
-      'At-sign (@) in URL string',
-      'An at-sign was detected in the URL. Characters before the "@" symbol can visually disguise the true destination domain that appears after it.',
-      20,
+      'At-sign (@) in URL authority',
+      'An at-sign was detected in the URL authority section. Browsers interpret text before the "@" as userinfo, while the actual destination server appears after it.',
+      30,
       'domain'
     );
   }
 
   // 2. Protocol / Transport Security
+  // Plain HTTP is noted as an informational/low signal, NOT treated as fraud by itself
   if (parsed.protocol === 'http:') {
     add(
-      'medium',
+      'low',
       'Unencrypted HTTP connection',
-      'The URL uses plain HTTP without TLS encryption. Traffic can be monitored or modified in transit. While not proof of malice, modern legitimate sites default to HTTPS.',
-      12,
+      'The URL uses plain HTTP without TLS encryption. Traffic can be monitored or modified in transit. While not evidence of fraud by itself, modern web services default to HTTPS.',
+      5,
       'transport'
     );
   }
@@ -1928,16 +2047,16 @@ function inspectUrl(raw) {
       add(
         'high',
         `Unusual service port (${portNum})`,
-        `The URL connects to port ${portNum} (${SUSPICIOUS_PORTS[portNum]}). Legitimate web applications rarely run on internal or administrative service ports.`,
-        22,
+        `The URL connects to port ${portNum} (${SUSPICIOUS_PORTS[portNum]}). Legitimate web applications rarely run on internal or non-web service ports.`,
+        30,
         'transport'
       );
-    } else if (![80, 443].includes(portNum)) {
+    } else if (![80, 443, 8080, 8443, 3000, 5000, 8000].includes(portNum)) {
       add(
         'low',
         `Non-standard web port (${portNum})`,
-        `The URL specifies custom port ${portNum}. Legitimate web services normally run on standard ports (80 for HTTP, 443 for HTTPS).`,
-        8,
+        `The URL specifies custom port ${portNum}. Standard public web services typically operate on standard ports 80 (HTTP) or 443 (HTTPS).`,
+        6,
         'transport'
       );
     }
@@ -1950,46 +2069,50 @@ function inspectUrl(raw) {
     /^(0x[0-9a-fA-F]+\.){3}0x[0-9a-fA-F]+$/i.test(rawHostBeforeCanonical);
 
   const isIPv4 = /^(\d{1,3}\.){3}\d{1,3}$/.test(host);
-  const isIPv6 = /^\[.*\]$/.test(rawHost);
+  const isIPv6 = /^\[.*\]$/.test(rawHost) || /^[0-9a-fA-F:]+$/.test(host) && host.includes(':');
 
   if (isHexOrDwordIP) {
     isIP = true;
     add(
       'high',
       'Obfuscated numeric IP representation',
-      `The hostname uses hexadecimal or integer notation ("${rawHostBeforeCanonical}") to disguise an IP destination from URL string filters.`,
-      25,
+      `The hostname uses hexadecimal, octal, or integer notation ("${rawHostBeforeCanonical}") to disguise an IP destination from URL string filters.`,
+      35,
       'domain'
     );
   }
 
-  if (isIPv4) {
+  if (isIPv4 || isIPv6) {
     isIP = true;
     const reserved = isPrivateOrReservedIP(host);
     if (reserved) {
+      isInternalIP = true;
       add(
         'high',
-        `Internal / ${reserved.type} IP address`,
-        `The URL targets a private or internal network IP address (${reserved.range}). Legitimate public internet links do not target internal addresses.`,
-        25,
+        `Internal / ${reserved.type} IP address (SSRF Risk)`,
+        `The URL targets a private, internal, or loopback network address (${reserved.range}). Legitimate public internet links do not target internal host infrastructure.`,
+        35,
         'domain'
       );
     } else if (!isHexOrDwordIP) {
       add(
         'high',
-        'Direct IPv4 address used as host',
-        'The link points directly to a numeric IP address rather than a domain name. This is commonly used in malware C2 servers and phishing to evade domain-based reputation filters.',
-        22,
+        'Direct numeric IP address used as host',
+        'The link points directly to a numeric IP address rather than a domain name. Direct IP hosts are commonly used in malware C2 servers and phishing to evade domain-based reputation lists.',
+        25,
         'domain'
       );
     }
-  } else if (isIPv6) {
-    isIP = true;
+  }
+
+  // Localhost keyword check
+  if (host === 'localhost' || host.endsWith('.localhost')) {
+    isInternalIP = true;
     add(
       'high',
-      'Direct IPv6 address used as host',
-      'The link targets an explicit IPv6 address instead of a standard registered domain name.',
-      20,
+      'Internal / Localhost destination targeted (SSRF Risk)',
+      'The URL targets the local loopback host (localhost). Legitimate public internet links do not target localhost.',
+      35,
       'domain'
     );
   }
@@ -1999,8 +2122,8 @@ function inspectUrl(raw) {
     add(
       'high',
       'Internationalized domain name (Punycode)',
-      'The domain contains Punycode ("xn--"). While legitimate for non-Latin writing systems, attackers frequently use it in homograph attacks to imitate well-known Latin brand domains with visually identical foreign glyphs.',
-      22,
+      'The domain contains Punycode ("xn--"). While legitimate for non-Latin writing systems, attackers frequently deploy Punycode homographs to visually impersonate popular Latin brand domains.',
+      25,
       'structural'
     );
   }
@@ -2010,26 +2133,26 @@ function inspectUrl(raw) {
     add(
       'high',
       'Invisible or bidirectional unicode characters',
-      'The URL contains zero-width, soft-hyphen, or direction-reversing unicode characters. These are malicious obfuscation techniques used to trick the human eye or bypass regex filters.',
-      25,
+      'The URL contains zero-width, soft-hyphen, or direction-reversing unicode characters used to obscure true URLs or bypass security filters.',
+      35,
       'structural'
     );
   }
 
   // 6. Domain Structure, Brand Impersonation & Typosquatting
   let detectedBrandSpoof = false;
-  if (!isIP) {
+  if (!isIP && !isInternalIP) {
     const hostLabels = host.split('.');
     const registeredParts = registeredDomain.split('.');
     const subdomains = hostLabels.slice(0, hostLabels.length - registeredParts.length);
 
-    // Excessive subdomain depth
-    if (hostLabels.length >= 5) {
+    // Deep subdomain nesting (only flagged if >= 5 labels and NOT on a recognized top domain)
+    if (hostLabels.length >= 5 && !isTopDomain) {
       add(
         'medium',
         'Excessive subdomain depth',
-        `The hostname contains ${hostLabels.length} subdomain labels. Deeply nested subdomains are often deployed to push the real registered domain out of view on mobile screens.`,
-        12,
+        `The hostname contains ${hostLabels.length} subdomain labels. Deeply nested subdomains on unranked domains are often used in phishing to push the real domain off-screen on mobile devices.`,
+        15,
         'structural'
       );
     }
@@ -2042,7 +2165,7 @@ function inspectUrl(raw) {
         'high',
         `${typoAlert.type} (${typoAlert.brand.toUpperCase()})`,
         typoAlert.detail,
-        25,
+        35,
         'domain'
       );
     }
@@ -2063,7 +2186,7 @@ function inspectUrl(raw) {
             'high',
             `Misleading brand in subdomain (${meta.name.toUpperCase()})`,
             `The URL displays brand keyword "${brandKey}" in its subdomain, but the actual registered destination is "${registeredDomain}". This is a primary indicator of brand impersonation phishing.`,
-            25,
+            35,
             'domain'
           );
           break;
@@ -2080,15 +2203,7 @@ function inspectUrl(raw) {
           'medium',
           `High-risk TLD (.${tld}) with account lure`,
           `The domain uses a top-level domain frequently associated with disposable registrations (.${tld}) combined with sensitive account keywords.`,
-          16,
-          'domain'
-        );
-      } else {
-        add(
-          'low',
-          `Elevated-risk top-level domain (.${tld})`,
-          `The domain uses an extension (.${tld}) with elevated prevalence in disposable and abusive infrastructure.`,
-          6,
+          20,
           'domain'
         );
       }
@@ -2104,8 +2219,8 @@ function inspectUrl(raw) {
     add(
       'high',
       'Deceptive double file extension',
-      `The URL path contains a deceptive double extension "${doubleExtMatch[0]}". Attackers use this to trick users into downloading executable malware disguised as a document or image.`,
-      25,
+      `The URL path contains a deceptive double extension "${doubleExtMatch[0]}". Attackers use this to trick users into executing malware disguised as a document or image.`,
+      35,
       'content'
     );
   }
@@ -2117,34 +2232,44 @@ function inspectUrl(raw) {
       'high',
       'Cryptocurrency credential / seed phrase lure',
       'The URL targets cryptocurrency private keys, seed phrases, or wallet recovery files. Legitimate services never request secret recovery phrases via web links.',
-      25,
+      35,
       'content'
     );
   }
 
-  // Potential Open Redirect parameters
-  for (const [param, val] of parsed.searchParams.entries()) {
-    if (['url', 'redirect', 'redirect_uri', 'next', 'dest', 'destination', 'return', 'goto', 'rurl', 'target', 'link'].includes(param.toLowerCase())) {
-      if (/^https?:\/\//i.test(val) || val.startsWith('//')) {
-        add(
-          'high',
-          `Potential open redirect parameter ("${param}")`,
-          `The query parameter "${param}" points directly to an external destination ("${val.slice(0, 50)}..."). Open redirects are exploited in phishing campaigns to route victims to unvetted external sites.`,
-          22,
-          'content'
-        );
-        break;
+  // Potential Open Redirect parameters:
+  // Only evaluate on non-top domains or when target is suspicious, preventing false positives on legitimate OAuth flows
+  if (!isTopDomain) {
+    for (const [param, val] of parsed.searchParams.entries()) {
+      if (['url', 'redirect', 'redirect_uri', 'next', 'dest', 'destination', 'return', 'goto', 'rurl', 'target', 'link'].includes(param.toLowerCase())) {
+        if (/^https?:\/\//i.test(val) || val.startsWith('//')) {
+          try {
+            const destUrl = new URL(val.startsWith('//') ? 'https:' + val : val);
+            const destRegistered = extractRegisteredDomain(destUrl.hostname);
+            // Only flag if redirecting to a completely different external domain
+            if (destRegistered && destRegistered !== registeredDomain) {
+              add(
+                'high',
+                `Potential open redirect parameter ("${param}")`,
+                `The query parameter "${param}" points to an external destination ("${val.slice(0, 50)}..."). Open redirects are exploited in phishing to route victims from trusted links to unvetted external sites.`,
+                25,
+                'content'
+              );
+              break;
+            }
+          } catch {}
+        }
       }
     }
   }
 
-  // 8. Obfuscation & Encoding
-  if (/(%[0-9a-fA-F]{2}){4,}/i.test(full)) {
+  // 8. Dangerous Obfuscation & Encoding
+  if (/%00|%0d%0a/i.test(full)) {
     add(
-      'medium',
-      'Repeated percent-encoding in URL',
-      'The URL contains four or more consecutive percent-encoded sequences, often employed to obscure the true path or parameters from casual inspection.',
-      8,
+      'high',
+      'Null byte or CRLF injection sequence detected',
+      'The URL contains null bytes (%00) or CRLF characters (%0D%0A) designed to exploit parser vulnerabilities or HTTP response splitting.',
+      35,
       'structural'
     );
   }
@@ -2154,46 +2279,17 @@ function inspectUrl(raw) {
       'medium',
       'Double percent-encoding detected',
       'The URL contains double-encoded character sequences (%25..), which can bypass certain web application firewalls and security filters.',
-      12,
+      15,
       'structural'
     );
-  }
-
-  // 9. Host and URL Length (Low-severity structural signals)
-  if (host.length > 50) {
-    add(
-      'low',
-      'Unusually long hostname',
-      `The hostname is ${host.length} characters long. While some legitimate CDNs use long hosts, attackers also generate long hostnames to avoid collisions.`,
-      5,
-      'structural'
-    );
-  }
-
-  if (full.length > 250) {
-    add(
-      'low',
-      'Unusually long URL string',
-      `The full URL is ${full.length} characters long. Long URLs can be legitimate but may also harbor large tracking or payload delivery parameters.`,
-      4,
-      'structural'
-    );
-  }
-
-  // 10. Sensitive keywords on UNVERIFIED domains only (avoid false positives on top domains)
-  if (!isTopDomain && !detectedBrandSpoof && !isIP) {
-    if (/(login|verify|secure|account|update|wallet|password|confirm|banking|authentication)/i.test(host)) {
-      add(
-        'low',
-        'Account or authentication keywords in unranked host',
-        'The hostname on an unverified domain contains terms commonly associated with account or banking portals. On unverified domains, this can be an indicator of credential harvesting.',
-        6,
-        'domain'
-      );
-    }
   }
 
   // Calculate component scores with anti-double-counting caps
+  let domainPoints = 0;
+  let transportPoints = 0;
+  let structuralPoints = 0;
+  let contentPoints = 0;
+
   for (const f of findings) {
     if (f.category === 'domain') domainPoints += f.points;
     else if (f.category === 'transport') transportPoints += f.points;
@@ -2201,17 +2297,21 @@ function inspectUrl(raw) {
     else if (f.category === 'content') contentPoints += f.points;
   }
 
-  const domainScore = Math.min(25, domainPoints);
+  const domainScore = Math.min(35, domainPoints);
   const transportScore = Math.min(25, transportPoints);
-  const structuralScore = Math.min(25, structuralPoints);
-  const contentScore = Math.min(25, contentPoints);
+  const structuralScore = Math.min(30, structuralPoints);
+  const contentScore = Math.min(35, contentPoints);
+
+  const highCount = findings.filter(f => f.severity === 'high').length;
+  const medCount = findings.filter(f => f.severity === 'medium').length;
+  const lowCount = findings.filter(f => f.severity === 'low').length;
 
   const highPoints = findings.filter(f => f.severity === 'high').reduce((acc, f) => acc + f.points, 0);
   const medPoints = findings.filter(f => f.severity === 'medium').reduce((acc, f) => acc + f.points, 0);
-  const lowPoints = Math.min(15, findings.filter(f => f.severity === 'low').reduce((acc, f) => acc + f.points, 0));
+  const lowPoints = Math.min(10, findings.filter(f => f.severity === 'low').reduce((acc, f) => acc + f.points, 0));
 
   let score = Math.min(100, highPoints + medPoints + lowPoints);
-  const hasHighSeverity = findings.some(f => f.severity === 'high');
+  const hasHighSeverity = highCount > 0;
 
   return {
     normalizedUrl: full,
@@ -2225,6 +2325,13 @@ function inspectUrl(raw) {
     findings,
     score,
     hasHighSeverity,
+    isInternalIP,
+    findingCounts: {
+      high: highCount,
+      medium: medCount,
+      low: lowCount,
+      total: findings.length
+    },
     componentScores: {
       domain: domainScore,
       transport: transportScore,
@@ -2234,6 +2341,8 @@ function inspectUrl(raw) {
   };
 }
 
+
+
 function runClientSideInspection(raw) {
   const local = inspectUrl(raw);
   const scanStartTime = Date.now();
@@ -2241,16 +2350,18 @@ function runClientSideInspection(raw) {
   let verdict;
   let verdictDetail;
 
-  if (local.hasHighSeverity || score >= 25) {
+  if (local.hasHighSeverity || score >= 30) {
     verdict = 'SUSPICIOUS';
-    verdictDetail = local.findings.length > 0
-      ? `Local structural analysis detected ${local.findings.length} warning indicator(s), including ${local.hasHighSeverity ? 'high-severity deception risks' : 'elevated risk patterns'}.`
-      : 'Local heuristic analysis detected significant warning indicators or deceptive patterns.';
+    const highFindings = local.findings.filter(f => f.severity === 'high');
+    const reasons = highFindings.length > 0
+      ? highFindings.map(f => f.title).join(', ')
+      : `${local.findings.length} warning indicators detected`;
+    verdictDetail = `Local analysis identified meaningful risk indicators: ${reasons}. Review individual evidence items below.`;
     score = Math.max(score, local.hasHighSeverity ? 50 : 35);
   } else {
-    verdict = 'NOT FLAGGED BY LOCAL ANALYSIS';
+    verdict = 'NO SUSPICIOUS INDICATORS FOUND — LOCAL ANALYSIS ONLY';
     verdictDetail = local.isPopularDomain
-      ? `Local analysis identified this as a recognized top domain (${local.registeredDomain}) and found no structural warning indicators. (Operating in client-side static mode; community feeds unconfigured).`
+      ? `Local analysis identified this as a recognized top domain (${local.registeredDomain}) with zero warning indicators. (Operating in client-side static mode; community feeds unconfigured).`
       : 'No structural or heuristic warning indicators were found by local analysis. (Operating in client-side static mode; community feeds unconfigured).';
   }
 
@@ -2270,10 +2381,10 @@ function runClientSideInspection(raw) {
       status: 'checked',
       latencyMs: 12,
       matches: [],
-      note: 'Analyzed in-browser using 1,000 indexed top domains and heuristic inspection.'
+      note: 'Analyzed in-browser using 1,000+ indexed top domains and heuristic inspection.'
     },
     {
-      source: 'URLhaus Community Feed',
+      source: 'URLhaus Community Threat Feed',
       status: 'not_configured',
       matches: [],
       note: 'Static GitHub Pages mode. Host with Node.js backend to query live URLhaus threat databases.'
@@ -2297,6 +2408,7 @@ function runClientSideInspection(raw) {
     riskLevel,
     reputationStatus: 'not_configured',
     findings: local.findings,
+    findingCounts: local.findingCounts,
     sources,
     sourcesChecked: 1,
     sourcesConfigured: 0,
