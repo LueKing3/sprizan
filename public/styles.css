@@ -1166,23 +1166,24 @@ body {
 }
 
 .orb-scanning-title {
-  font: 800 24px var(--sans);
+  font: 800 20px var(--sans);
   color: #ffffff;
   letter-spacing: 3.5px;
   text-transform: uppercase;
   text-shadow: 0 0 12px rgba(255, 255, 255, 0.95), 0 0 30px rgba(255, 42, 59, 0.95), 0 0 55px rgba(255, 42, 59, 0.6);
   animation: scanningTextSheen 2.2s ease-in-out infinite;
+  transform: translateY(-28px);
 }
 
 @keyframes scanningTextSheen {
   0%, 100% {
     opacity: 0.95;
-    transform: scale(1);
+    transform: translateY(-28px) scale(1);
     text-shadow: 0 0 10px rgba(255, 255, 255, 0.9), 0 0 26px rgba(255, 42, 59, 0.85);
   }
   50% {
     opacity: 1;
-    transform: scale(1.02);
+    transform: translateY(-28px) scale(1.02);
     text-shadow: 0 0 16px #ffffff, 0 0 38px #ff2a3b, 0 0 65px rgba(255, 42, 59, 0.8);
   }
 }

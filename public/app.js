@@ -241,9 +241,10 @@ function renderSources() {
 /**
  * =========================================================
  * PURE WEB AUDIO CYBER SYNTHESIZER
- * Synthesizes mechanical clicks, laser crossing pings,
- * low electronic drone, absorption thumps, and completion chime.
- * Zero external audio files or dependencies.
+ * Subdued, atmospheric electronic drone, smooth rising &
+ * falling continuous frequency sweep, and cinematic 2-note
+ * confirmation chime upon analysis completion.
+ * ZERO per-character ticking or clicking noise.
  * =========================================================
  */
 class CyberAudioEngine {
@@ -252,13 +253,21 @@ class CyberAudioEngine {
     this.enabled = false;
     this.volume = 0.5;
     this.masterGain = null;
-    this.humOsc1 = null;
-    this.humOsc2 = null;
-    this.humGain = null;
-    this.lastEntryTick = 0;
-    this.lastLaserTick = 0;
-    this.lastAbsorbTick = 0;
     this.isScanning = false;
+
+    // Atmospheric soundscape nodes
+    this.droneOsc1 = null;
+    this.droneOsc2 = null;
+    this.droneGain = null;
+
+    this.sweepOsc = null;
+    this.sweepFilter = null;
+    this.sweepLfo = null;
+    this.sweepLfoGain = null;
+    this.sweepGain = null;
+
+    this.humOsc = null;
+    this.humGain = null;
   }
 
   initContext() {
@@ -276,7 +285,7 @@ class CyberAudioEngine {
       this.masterGain.gain.setValueAtTime(this.enabled ? this.volume : 0, this.ctx.currentTime);
       this.masterGain.connect(this.ctx.destination);
     } catch (e) {
-      console.warn('AudioContext init failed:', e);
+      console.warn('AudioContext init error:', e);
     }
   }
 
@@ -289,9 +298,9 @@ class CyberAudioEngine {
       this.masterGain.gain.setValueAtTime(this.enabled ? this.volume : 0, t);
     }
     if (this.enabled && this.isScanning) {
-      this.startHum();
+      this.startScanningSoundscape();
     } else if (!this.enabled) {
-      this.stopHum();
+      this.stopScanningSoundscape();
     }
   }
 
@@ -307,163 +316,130 @@ class CyberAudioEngine {
     this.isScanning = true;
     if (!this.enabled) return;
     this.initContext();
-    this.startHum();
+    this.startScanningSoundscape();
   }
 
   stopScan() {
     this.isScanning = false;
-    this.stopHum();
+    this.stopScanningSoundscape();
   }
 
-  startHum() {
-    if (!this.ctx || !this.enabled || this.humOsc1) return;
+  startScanningSoundscape() {
+    if (!this.ctx || !this.enabled || this.droneOsc1) return;
     try {
       const t = this.ctx.currentTime;
-      this.humOsc1 = this.ctx.createOscillator();
-      this.humOsc2 = this.ctx.createOscillator();
+
+      // A. Deep futuristic electronic drone (52Hz sine + 104Hz harmonic)
+      this.droneOsc1 = this.ctx.createOscillator();
+      this.droneOsc2 = this.ctx.createOscillator();
+      this.droneGain = this.ctx.createGain();
+
+      this.droneOsc1.type = 'sine';
+      this.droneOsc1.frequency.setValueAtTime(52, t);
+      this.droneOsc2.type = 'triangle';
+      this.droneOsc2.frequency.setValueAtTime(104, t);
+
+      const droneFilter = this.ctx.createBiquadFilter();
+      droneFilter.type = 'lowpass';
+      droneFilter.frequency.setValueAtTime(115, t);
+
+      this.droneGain.gain.setValueAtTime(0, t);
+      this.droneGain.gain.linearRampToValueAtTime(0.06, t + 0.6);
+
+      this.droneOsc1.connect(droneFilter);
+      this.droneOsc2.connect(droneFilter);
+      droneFilter.connect(this.droneGain);
+      this.droneGain.connect(this.masterGain);
+
+      this.droneOsc1.start();
+      this.droneOsc2.start();
+
+      // B. Soft, continuous rising and falling electronic sweep (LFO at 0.35 Hz)
+      this.sweepOsc = this.ctx.createOscillator();
+      this.sweepFilter = this.ctx.createBiquadFilter();
+      this.sweepLfo = this.ctx.createOscillator();
+      this.sweepLfoGain = this.ctx.createGain();
+      this.sweepGain = this.ctx.createGain();
+
+      this.sweepOsc.type = 'sine';
+      this.sweepOsc.frequency.setValueAtTime(220, t);
+
+      this.sweepFilter.type = 'bandpass';
+      this.sweepFilter.frequency.setValueAtTime(450, t);
+      this.sweepFilter.Q.setValueAtTime(3.0, t);
+
+      this.sweepLfo.type = 'sine';
+      this.sweepLfo.frequency.setValueAtTime(0.35, t);
+      this.sweepLfoGain.gain.setValueAtTime(230, t); // modulates 450 +/- 230Hz
+
+      this.sweepLfo.connect(this.sweepFilter.frequency);
+
+      this.sweepGain.gain.setValueAtTime(0, t);
+      this.sweepGain.gain.linearRampToValueAtTime(0.038, t + 0.8);
+
+      this.sweepOsc.connect(this.sweepFilter);
+      this.sweepFilter.connect(this.sweepGain);
+      this.sweepGain.connect(this.masterGain);
+
+      this.sweepLfo.start();
+      this.sweepOsc.start();
+
+      // C. Restrained low-frequency energy hum (65Hz)
+      this.humOsc = this.ctx.createOscillator();
       this.humGain = this.ctx.createGain();
 
-      // Low electronic drone: 55Hz and 110Hz sub-frequencies
-      this.humOsc1.type = 'sawtooth';
-      this.humOsc1.frequency.setValueAtTime(55, t);
-      this.humOsc2.type = 'sine';
-      this.humOsc2.frequency.setValueAtTime(110, t);
-
-      // Low-pass filter to make it a subtle, deep atmospheric hum
-      const filter = this.ctx.createBiquadFilter();
-      filter.type = 'lowpass';
-      filter.frequency.setValueAtTime(140, t);
+      this.humOsc.type = 'sine';
+      this.humOsc.frequency.setValueAtTime(65, t);
 
       this.humGain.gain.setValueAtTime(0, t);
-      this.humGain.gain.linearRampToValueAtTime(0.08, t + 0.4);
+      this.humGain.gain.linearRampToValueAtTime(0.04, t + 0.5);
 
-      this.humOsc1.connect(filter);
-      this.humOsc2.connect(filter);
-      filter.connect(this.humGain);
+      this.humOsc.connect(this.humGain);
       this.humGain.connect(this.masterGain);
 
-      this.humOsc1.start();
-      this.humOsc2.start();
-    } catch (e) {}
-  }
-
-  stopHum() {
-    if (this.humGain && this.ctx) {
-      try {
-        const t = this.ctx.currentTime;
-        this.humGain.gain.linearRampToValueAtTime(0, t + 0.15);
-        setTimeout(() => {
-          if (this.humOsc1) { try { this.humOsc1.stop(); } catch(e) {} this.humOsc1 = null; }
-          if (this.humOsc2) { try { this.humOsc2.stop(); } catch(e) {} this.humOsc2 = null; }
-          this.humGain = null;
-        }, 200);
-      } catch(e) {
-        this.humOsc1 = null;
-        this.humOsc2 = null;
-        this.humGain = null;
-      }
+      this.humOsc.start();
+    } catch (e) {
+      console.warn('Error starting cyber soundscape:', e);
     }
   }
 
-  playCharEntryTick() {
-    if (!this.enabled || !this.ctx) return;
-    const now = performance.now();
-    if (now - this.lastEntryTick < 120) return; // throttle to avoid noise
-    this.lastEntryTick = now;
-
+  stopScanningSoundscape() {
+    if (!this.ctx) return;
     try {
       const t = this.ctx.currentTime;
-      const osc = this.ctx.createOscillator();
-      const gain = this.ctx.createGain();
-      const filter = this.ctx.createBiquadFilter();
+      if (this.droneGain) this.droneGain.gain.linearRampToValueAtTime(0, t + 0.2);
+      if (this.sweepGain) this.sweepGain.gain.linearRampToValueAtTime(0, t + 0.2);
+      if (this.humGain) this.humGain.gain.linearRampToValueAtTime(0, t + 0.2);
 
-      osc.type = 'triangle';
-      osc.frequency.setValueAtTime(950 + Math.random() * 150, t);
-      osc.frequency.exponentialRampToValueAtTime(180, t + 0.02);
-
-      filter.type = 'bandpass';
-      filter.frequency.setValueAtTime(800, t);
-      filter.Q.setValueAtTime(3.5, t);
-
-      gain.gain.setValueAtTime(0.12, t);
-      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.025);
-
-      osc.connect(filter);
-      filter.connect(gain);
-      gain.connect(this.masterGain);
-
-      osc.start(t);
-      osc.stop(t + 0.03);
-    } catch (e) {}
-  }
-
-  playLaserCrossingTick() {
-    if (!this.enabled || !this.ctx) return;
-    const now = performance.now();
-    if (now - this.lastLaserTick < 140) return; // throttle
-    this.lastLaserTick = now;
-
-    try {
-      const t = this.ctx.currentTime;
-      const osc = this.ctx.createOscillator();
-      const gain = this.ctx.createGain();
-      const filter = this.ctx.createBiquadFilter();
-
-      // Sharper metallic tick
-      osc.type = 'square';
-      osc.frequency.setValueAtTime(2400 + Math.random() * 400, t);
-      osc.frequency.exponentialRampToValueAtTime(450, t + 0.03);
-
-      filter.type = 'highpass';
-      filter.frequency.setValueAtTime(1200, t);
-
-      gain.gain.setValueAtTime(0.14, t);
-      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.035);
-
-      osc.connect(filter);
-      filter.connect(gain);
-      gain.connect(this.masterGain);
-
-      osc.start(t);
-      osc.stop(t + 0.04);
-    } catch (e) {}
-  }
-
-  playAbsorption() {
-    if (!this.enabled || !this.ctx) return;
-    const now = performance.now();
-    if (now - this.lastAbsorbTick < 180) return;
-    this.lastAbsorbTick = now;
-
-    try {
-      const t = this.ctx.currentTime;
-      const osc = this.ctx.createOscillator();
-      const gain = this.ctx.createGain();
-
-      // Low punchy sub-bass pulse
-      osc.type = 'sine';
-      osc.frequency.setValueAtTime(120, t);
-      osc.frequency.exponentialRampToValueAtTime(35, t + 0.08);
-
-      gain.gain.setValueAtTime(0.18, t);
-      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.09);
-
-      osc.connect(gain);
-      gain.connect(this.masterGain);
-
-      osc.start(t);
-      osc.stop(t + 0.1);
-    } catch (e) {}
+      setTimeout(() => {
+        try {
+          if (this.droneOsc1) { this.droneOsc1.stop(); this.droneOsc1.disconnect(); this.droneOsc1 = null; }
+          if (this.droneOsc2) { this.droneOsc2.stop(); this.droneOsc2.disconnect(); this.droneOsc2 = null; }
+          if (this.sweepOsc) { this.sweepOsc.stop(); this.sweepOsc.disconnect(); this.sweepOsc = null; }
+          if (this.sweepLfo) { this.sweepLfo.stop(); this.sweepLfo.disconnect(); this.sweepLfo = null; }
+          if (this.humOsc) { this.humOsc.stop(); this.humOsc.disconnect(); this.humOsc = null; }
+          this.droneGain = null;
+          this.sweepGain = null;
+          this.humGain = null;
+        } catch(e) {}
+      }, 250);
+    } catch (e) {
+      this.droneOsc1 = null;
+      this.droneOsc2 = null;
+      this.sweepOsc = null;
+      this.sweepLfo = null;
+      this.humOsc = null;
+    }
   }
 
   playCompletionSound() {
     if (!this.enabled || !this.ctx) return;
     try {
       const t = this.ctx.currentTime;
-      // Futuristic confirmation chime: 2-note cyber chord (C5 -> G5)
+      // Premium cinematic confirmation tone: 2-tone futuristic harmonic chime (C5 -> G5)
       const notes = [523.25, 783.99];
       notes.forEach((freq, idx) => {
-        const noteTime = t + idx * 0.09;
+        const noteTime = t + idx * 0.1;
         const osc = this.ctx.createOscillator();
         const gain = this.ctx.createGain();
 
@@ -471,14 +447,14 @@ class CyberAudioEngine {
         osc.frequency.setValueAtTime(freq, noteTime);
 
         gain.gain.setValueAtTime(0, noteTime);
-        gain.gain.linearRampToValueAtTime(0.15, noteTime + 0.02);
-        gain.gain.exponentialRampToValueAtTime(0.001, noteTime + 0.45);
+        gain.gain.linearRampToValueAtTime(0.12, noteTime + 0.03);
+        gain.gain.exponentialRampToValueAtTime(0.0001, noteTime + 0.65);
 
         osc.connect(gain);
         gain.connect(this.masterGain);
 
         osc.start(noteTime);
-        osc.stop(noteTime + 0.5);
+        osc.stop(noteTime + 0.7);
       });
     } catch (e) {}
   }
@@ -489,9 +465,9 @@ const globalAudioEngine = new CyberAudioEngine();
 /**
  * =========================================================
  * CINEMATIC CYBER SCANNING ORB ENGINE (CANVAS 60FPS)
- * Sequential character streaming along gravitational spirals,
- * laser crossing illumination, singular core absorption,
- * propagating shockwave ripples, and reactive energy bloom.
+ * Horizontal Left-to-Right stream of independently animated
+ * URL characters traveling through the scanning orb along
+ * a common baseline, laser field illumination, and zero boxes.
  * =========================================================
  */
 class OrbScanEngine {
@@ -500,9 +476,6 @@ class OrbScanEngine {
     this.ctx = canvas.getContext('2d');
     this.rawUrl = rawUrl || 'https://target-domain.com';
     this.audio = audioEngine || globalAudioEngine;
-
-    this.urlChars = this.rawUrl.split('');
-    if (this.urlChars.length === 0) this.urlChars = ['h', 't', 't', 'p', 's'];
 
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     this.width = 520;
@@ -513,26 +486,26 @@ class OrbScanEngine {
 
     this.cx = this.width / 2; // 260
     this.cy = this.height / 2; // 260
+    this.baselineY = this.cy; // Single common horizontal baseline through center
     this.coreRadius = 112;
-    this.spawnRadius = 240;
 
     this.running = false;
     this.animId = null;
     this.laserAngle = 0;
-    this.laserY = this.cy;
 
-    // Characters in flight
-    this.activeCharacters = [];
-    this.charCursor = 0;
-    this.spawnTimer = 0;
-    this.spawnInterval = 0.17; // 170ms between character entries
-    this.spawnAngle = 0;
-    this.maxActiveChars = 14;
+    // Horizontal character stream configuration
+    this.charSpacing = 22; // consistent spacing between glyphs
+    this.streamSpeed = 85; // px per second from LEFT to RIGHT
+    this.separator = '     •••     ';
+    this.fullStreamText = this.rawUrl + this.separator;
+    this.fullStreamChars = this.fullStreamText.split('');
+    this.streamCursor = 0;
 
-    // Orb energy and shockwaves
-    this.coreEnergy = 0;
-    this.ripples = [];
-    this.sparks = [];
+    // Characters in flight along horizontal baseline
+    this.characters = [];
+    this.initHorizontalStream();
+
+    // Orb visual energy & technical markings
     this.lightningArcs = [];
     this.lightningTimer = 0;
     this.ambientEmbers = [];
@@ -540,16 +513,34 @@ class OrbScanEngine {
     this.initEmbers();
   }
 
+  initHorizontalStream() {
+    this.characters = [];
+    // Populate horizontal line from left edge so stream is immediately active
+    let curX = 30;
+    while (curX < this.width + 40) {
+      const char = this.fullStreamChars[this.streamCursor];
+      this.streamCursor = (this.streamCursor + 1) % this.fullStreamChars.length;
+      this.characters.push({
+        char,
+        x: curX,
+        y: this.baselineY,
+        scanGlow: 0,
+        opacity: 0
+      });
+      curX += this.charSpacing;
+    }
+  }
+
   initEmbers() {
     this.ambientEmbers = [];
-    for (let i = 0; i < 24; i++) {
+    for (let i = 0; i < 22; i++) {
       this.ambientEmbers.push({
         x: this.cx + (Math.random() - 0.5) * 440,
         y: this.cy + (Math.random() - 0.5) * 440,
-        vx: (Math.random() - 0.5) * 0.4,
-        vy: -0.3 - Math.random() * 0.6,
+        vx: (Math.random() - 0.5) * 0.35,
+        vy: -0.3 - Math.random() * 0.5,
         size: 1 + Math.random() * 2,
-        alpha: 0.15 + Math.random() * 0.45,
+        alpha: 0.15 + Math.random() * 0.4,
         color: Math.random() > 0.85 ? '#ffd54f' : '#ff2a3b'
       });
     }
@@ -585,108 +576,54 @@ class OrbScanEngine {
   }
 
   update(dt) {
-    // 1. Decay core energy pulse
-    this.coreEnergy = Math.max(0, this.coreEnergy - dt * 1.5);
+    // 1. Advance horizontal character stream from LEFT to RIGHT
+    let minX = Infinity;
 
-    // 2. Laser vertical oscillation
-    this.laserAngle += dt * 1.8;
-    this.laserY = this.cy + Math.sin(this.laserAngle) * 22;
+    for (let i = this.characters.length - 1; i >= 0; i--) {
+      const c = this.characters[i];
+      c.x += this.streamSpeed * dt;
+      c.y = this.baselineY; // STRICTLY COMMON HORIZONTAL BASELINE
 
-    // 3. Sequential Character Spawner (streams URL character by character)
-    this.spawnTimer += dt;
-    if (this.spawnTimer >= this.spawnInterval && this.activeCharacters.length < this.maxActiveChars) {
-      this.spawnTimer = 0;
-      const char = this.urlChars[this.charCursor];
-      this.charCursor = (this.charCursor + 1) % this.urlChars.length;
+      // Distance to orb center (cx = 260)
+      const distToCenter = Math.abs(c.x - this.cx);
 
-      // Stagger spawn angle around perimeter
-      this.spawnAngle += 0.68 + (Math.random() - 0.5) * 0.2;
+      // Scanning field illumination factor: illuminates when crossing center
+      c.scanGlow = Math.max(0, 1 - (distToCenter / 48));
 
-      this.activeCharacters.push({
+      // Smooth horizontal fade-in at left and fade-out at right
+      let opacity = 1.0;
+      if (c.x < 110) {
+        opacity = Math.max(0, (c.x - 20) / 90);
+      } else if (c.x > 410) {
+        opacity = Math.max(0, (500 - c.x) / 90);
+      }
+      c.opacity = opacity;
+
+      if (c.x < minX) minX = c.x;
+
+      // Disappear smoothly after passing through the scanning zone
+      if (c.x > 530) {
+        this.characters.splice(i, 1);
+      }
+    }
+
+    // 2. Continuously append new characters at the left to sustain uninterrupted stream
+    while (minX > -this.charSpacing) {
+      const newX = (minX === Infinity ? 0 : minX) - this.charSpacing;
+      const char = this.fullStreamChars[this.streamCursor];
+      this.streamCursor = (this.streamCursor + 1) % this.fullStreamChars.length;
+
+      this.characters.unshift({
         char,
-        r: this.spawnRadius + (Math.random() - 0.5) * 8,
-        theta: this.spawnAngle,
-        vrBase: 46,
-        omegaBase: 1.15,
-        beamFlash: 0,
-        hasFlashedLaser: false,
-        age: 0
+        x: newX,
+        y: this.baselineY,
+        scanGlow: 0,
+        opacity: 0
       });
-
-      if (this.audio) this.audio.playCharEntryTick();
+      minX = newX;
     }
 
-    // 4. Update Inward Gravitational Spiral Physics
-    for (let i = this.activeCharacters.length - 1; i >= 0; i--) {
-      const c = this.activeCharacters[i];
-      c.age += dt;
-
-      // Gravitational acceleration: speed surges as distance to singularity closes
-      const progress = Math.max(0, Math.min(1.0, 1.0 - (c.r - 18) / (this.spawnRadius - 18)));
-      const radialSpeed = c.vrBase * (1 + Math.pow(progress, 1.4) * 2.8);
-      const angularSpeed = c.omegaBase * (1 + Math.pow(progress, 1.8) * 3.6);
-
-      c.r -= radialSpeed * dt;
-      c.theta += angularSpeed * dt;
-
-      const x = this.cx + c.r * Math.cos(c.theta);
-      const y = this.cy + c.r * 0.76 * Math.sin(c.theta);
-
-      // Horizontal Laser Beam Collision Detection
-      const dy = Math.abs(y - this.laserY);
-      if (dy < 18 && c.r < this.coreRadius + 35) {
-        c.beamFlash = Math.min(1.0, c.beamFlash + dt * 10);
-        if (c.beamFlash > 0.4 && !c.hasFlashedLaser) {
-          c.hasFlashedLaser = true;
-          if (this.audio) this.audio.playLaserCrossingTick();
-          this.spawnCharSpark(x, y, '#ffd54f');
-        }
-      } else {
-        c.beamFlash = Math.max(0, c.beamFlash - dt * 3.5);
-      }
-
-      // Singularity Ingestion Event (absorbed into core)
-      if (c.r <= 20) {
-        this.triggerCoreAbsorption(x, y);
-        if (this.audio) this.audio.playAbsorption();
-        this.activeCharacters.splice(i, 1);
-      }
-    }
-
-    // 5. Update shockwave ripples
-    for (let i = this.ripples.length - 1; i >= 0; i--) {
-      const rip = this.ripples[i];
-      rip.r += rip.speed;
-      rip.alpha -= dt * 1.8;
-      if (rip.alpha <= 0 || rip.r >= rip.maxR) {
-        this.ripples.splice(i, 1);
-      }
-    }
-
-    // 6. Update golden electrical arcs
-    this.lightningTimer++;
-    if (this.lightningTimer > 35 && (this.coreEnergy > 0.3 || Math.random() < 0.08)) {
-      this.spawnLightningArc();
-      this.lightningTimer = 0;
-    }
-
-    for (let i = this.lightningArcs.length - 1; i >= 0; i--) {
-      const arc = this.lightningArcs[i];
-      arc.life -= dt * 8.5;
-      if (arc.life <= 0) this.lightningArcs.splice(i, 1);
-    }
-
-    // 7. Update sparks
-    for (let i = this.sparks.length - 1; i >= 0; i--) {
-      const p = this.sparks[i];
-      p.x += p.vx;
-      p.y += p.vy;
-      p.vy += 0.04;
-      p.alpha -= dt * 2.4;
-      if (p.alpha <= 0) this.sparks.splice(i, 1);
-    }
-
-    // 8. Update ambient embers
+    // 3. Subtle background ambient embers
     for (const e of this.ambientEmbers) {
       e.x += e.vx;
       e.y += e.vy;
@@ -695,47 +632,33 @@ class OrbScanEngine {
         e.x = this.cx + (Math.random() - 0.5) * 400;
       }
     }
-  }
 
-  triggerCoreAbsorption(x, y) {
-    this.coreEnergy = Math.min(1.0, this.coreEnergy + 0.38);
-
-    if (this.ripples.length < 8) {
-      this.ripples.push({
-        r: 20,
-        maxR: 240,
-        alpha: 0.95,
-        speed: 6.5
-      });
+    // 4. Occasional golden technical arcs along circular rings
+    this.lightningTimer++;
+    if (this.lightningTimer > 45 && Math.random() < 0.08) {
+      this.spawnLightningArc();
+      this.lightningTimer = 0;
     }
 
-    for (let i = 0; i < 5; i++) {
-      const ang = Math.random() * Math.PI * 2;
-      const spd = 1.4 + Math.random() * 2.4;
-      this.sparks.push({
-        x: x || this.cx,
-        y: y || this.cy,
-        vx: Math.cos(ang) * spd,
-        vy: Math.sin(ang) * spd,
-        alpha: 1.0,
-        size: 1.5 + Math.random() * 2,
-        color: Math.random() > 0.35 ? '#ff1744' : '#ffd54f'
-      });
+    for (let i = this.lightningArcs.length - 1; i >= 0; i--) {
+      const arc = this.lightningArcs[i];
+      arc.life -= dt * 7.0;
+      if (arc.life <= 0) this.lightningArcs.splice(i, 1);
     }
   }
 
   spawnLightningArc() {
-    const r1 = this.coreRadius + 25;
-    const r2 = this.coreRadius + 55;
+    const r1 = this.coreRadius + 20;
+    const r2 = this.coreRadius + 50;
     const baseAngle = Math.random() * Math.PI * 2;
-    const arcSpan = 0.25 + Math.random() * 0.4;
+    const arcSpan = 0.2 + Math.random() * 0.35;
     const segments = 4;
     const pts = [];
 
     for (let i = 0; i <= segments; i++) {
       const frac = i / segments;
       const angle = baseAngle + frac * arcSpan;
-      const radius = r1 + frac * (r2 - r1) + (Math.random() - 0.5) * 12;
+      const radius = r1 + frac * (r2 - r1) + (Math.random() - 0.5) * 10;
       pts.push({
         x: this.cx + Math.cos(angle) * radius,
         y: this.cy + Math.sin(angle) * radius
@@ -745,54 +668,30 @@ class OrbScanEngine {
     this.lightningArcs.push({ pts, life: 1.0 });
   }
 
-  spawnCharSpark(x, y, color = '#ffd54f') {
-    if (this.sparks.length > 35) return;
-    for (let i = 0; i < 3; i++) {
-      const angle = Math.random() * Math.PI * 2;
-      const speed = 0.9 + Math.random() * 2.0;
-      this.sparks.push({
-        x,
-        y,
-        vx: Math.cos(angle) * speed,
-        vy: Math.sin(angle) * speed - 0.4,
-        alpha: 0.95,
-        size: 1 + Math.random() * 1.5,
-        color
-      });
-    }
-  }
-
   draw() {
     const ctx = this.ctx;
     ctx.clearRect(0, 0, this.width, this.height);
 
-    // 1. Ambient embers in deep background
+    // 1. Background ambient embers
     this.drawEmbers(ctx);
 
-    // 2. Shockwave ripples from character absorptions
-    this.drawRipples(ctx);
-
-    // 3. 3D Spherical Core (reacts dynamically to coreEnergy)
+    // 2. 3D Spherical Scanning Core
     this.drawSphereCore(ctx);
 
-    // 4. Characters travelling along gravitational trajectories into orb
-    this.drawCharacters(ctx);
-
-    // 5. Continuous horizontal laser beam across orb
-    this.drawHorizontalBeam(ctx);
-
-    // 6. Golden electrical arcs jumping along rings
+    // 3. Golden electrical arcs along outer rings
     this.drawLightning(ctx);
 
-    // 7. Radiant sparks
-    this.drawSparks(ctx);
+    // 4. Continuous horizontal red energy scanning beam
+    this.drawHorizontalBeam(ctx);
+
+    // 5. HORIZONTAL CHARACTER STREAM (Strictly Left-to-Right, Clean Typography, Zero Boxes)
+    this.drawHorizontalCharacters(ctx);
   }
 
   drawSphereCore(ctx) {
     const cx = this.cx;
     const cy = this.cy;
     const R = this.coreRadius;
-    const pulseBoost = this.coreEnergy;
 
     ctx.save();
 
@@ -800,22 +699,22 @@ class OrbScanEngine {
     ctx.beginPath();
     ctx.arc(cx, cy, R, 0, Math.PI * 2);
 
-    // 3D Shaded Sphere Fill with Dynamic Energy Pulse
+    // 3D Shaded Sphere Fill
     const grad = ctx.createRadialGradient(cx - 25, cy - 30, 15, cx, cy, R);
     grad.addColorStop(0, '#1c222a');
     grad.addColorStop(0.45, '#0c0f14');
     grad.addColorStop(0.85, '#040507');
-    grad.addColorStop(1, pulseBoost > 0.2 ? '#ff2a3b' : '#d81b60');
+    grad.addColorStop(1, '#ff2a3b');
     ctx.fillStyle = grad;
-    ctx.shadowColor = pulseBoost > 0.3 ? '#ff1744' : 'rgba(255, 42, 59, 0.85)';
-    ctx.shadowBlur = 35 + pulseBoost * 30;
+    ctx.shadowColor = 'rgba(255, 42, 59, 0.85)';
+    ctx.shadowBlur = 40;
     ctx.fill();
 
     // Procedural Tech Latitude Lines on Sphere Surface
     ctx.clip();
     ctx.shadowBlur = 0;
     ctx.lineWidth = 1;
-    ctx.strokeStyle = 'rgba(255, 42, 59, ' + (0.12 + pulseBoost * 0.18).toFixed(2) + ')';
+    ctx.strokeStyle = 'rgba(255, 42, 59, 0.16)';
 
     for (let lat = -60; lat <= 60; lat += 24) {
       const yLat = cy + (lat / 90) * R;
@@ -825,136 +724,19 @@ class OrbScanEngine {
       ctx.stroke();
     }
 
-    // Inner Absorption Core Glow (Flashes bright red when characters enter)
-    if (pulseBoost > 0.05) {
-      const coreFlash = ctx.createRadialGradient(cx, cy, 0, cx, cy, R * 0.75);
-      coreFlash.addColorStop(0, 'rgba(255, 255, 255, ' + (0.38 * pulseBoost).toFixed(2) + ')');
-      coreFlash.addColorStop(0.3, 'rgba(255, 42, 59, ' + (0.68 * pulseBoost).toFixed(2) + ')');
-      coreFlash.addColorStop(1, 'rgba(0,0,0,0)');
-      ctx.fillStyle = coreFlash;
-      ctx.fill();
-    }
-
     // Inner Rim Vignette
     const innerRim = ctx.createRadialGradient(cx, cy, R * 0.72, cx, cy, R);
     innerRim.addColorStop(0, 'rgba(0,0,0,0)');
     innerRim.addColorStop(0.9, 'rgba(0,0,0,0.6)');
-    innerRim.addColorStop(1, 'rgba(255, 30, 45, ' + (0.65 + pulseBoost * 0.3).toFixed(2) + ')');
+    innerRim.addColorStop(1, 'rgba(255, 30, 45, 0.75)');
     ctx.fillStyle = innerRim;
     ctx.fill();
 
     ctx.restore();
   }
 
-  drawCharacters(ctx) {
-    ctx.save();
-
-    for (const c of this.activeCharacters) {
-      const x = this.cx + c.r * Math.cos(c.theta);
-      const y = this.cy + c.r * 0.76 * Math.sin(c.theta);
-
-      ctx.save();
-      ctx.translate(x, y);
-
-      // Smooth opacity fade in at spawn and fade out at singularity
-      let alpha = Math.min(1.0, c.age * 4.0);
-      if (c.r < 32) {
-        alpha = Math.max(0, (c.r - 14) / 18);
-      }
-      ctx.globalAlpha = alpha;
-
-      const isCrossingLaser = c.beamFlash > 0.15;
-      const isInsideCore = c.r < this.coreRadius;
-
-      // High-Contrast Cyber Data Packet Capsule: 28px x 28px
-      const badgeW = 28;
-      const badgeH = 28;
-      const halfW = badgeW / 2;
-      const halfH = badgeH / 2;
-
-      // 1. Draw rounded capsule backdrop
-      ctx.beginPath();
-      if (ctx.roundRect) {
-        ctx.roundRect(-halfW, -halfH, badgeW, badgeH, 5);
-      } else {
-        ctx.rect(-halfW, -halfH, badgeW, badgeH);
-      }
-
-      if (isCrossingLaser) {
-        ctx.fillStyle = 'rgba(255, 240, 180, 0.22)';
-        ctx.strokeStyle = '#ffd54f';
-        ctx.shadowColor = '#ffd54f';
-        ctx.shadowBlur = 18;
-        ctx.lineWidth = 2.0;
-      } else if (isInsideCore) {
-        ctx.fillStyle = 'rgba(20, 4, 8, 0.9)';
-        ctx.strokeStyle = '#ff1744';
-        ctx.shadowColor = '#ff2a3b';
-        ctx.shadowBlur = 14;
-        ctx.lineWidth = 1.8;
-      } else {
-        ctx.fillStyle = 'rgba(9, 13, 20, 0.88)';
-        ctx.strokeStyle = 'rgba(255, 68, 85, 0.85)';
-        ctx.shadowColor = 'rgba(255, 42, 59, 0.6)';
-        ctx.shadowBlur = 10;
-        ctx.lineWidth = 1.4;
-      }
-      ctx.fill();
-      ctx.stroke();
-
-      // 2. Technical corner tick marks on badge
-      ctx.strokeStyle = isCrossingLaser ? '#ffffff' : (isInsideCore ? '#ff4d5a' : '#ff7a88');
-      ctx.lineWidth = 1;
-      const tick = 3;
-      ctx.beginPath();
-      ctx.moveTo(-halfW, -halfH + tick); ctx.lineTo(-halfW, -halfH); ctx.lineTo(-halfW + tick, -halfH);
-      ctx.moveTo(halfW, halfH - tick); ctx.lineTo(halfW, halfH); ctx.lineTo(halfW - tick, halfH);
-      ctx.stroke();
-
-      // 3. THE CHARACTER GLYPH: BOLD, CRISP, HIGH-CONTRAST (100% visible)
-      ctx.font = '800 18px ui-monospace, SFMono-Regular, "JetBrains Mono", Menlo, Consolas, monospace';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-
-      if (isCrossingLaser) {
-        ctx.fillStyle = '#ffffff';
-        ctx.shadowColor = '#ffffff';
-        ctx.shadowBlur = 16;
-      } else if (isInsideCore) {
-        ctx.fillStyle = '#ffffff';
-        ctx.shadowColor = '#ff2a3b';
-        ctx.shadowBlur = 12;
-      } else {
-        ctx.fillStyle = '#ffffff';
-        ctx.shadowColor = '#ff4455';
-        ctx.shadowBlur = 8;
-      }
-
-      ctx.fillText(c.char, 0, 1);
-      ctx.restore();
-    }
-
-    ctx.restore();
-  }
-
-  drawRipples(ctx) {
-    if (!this.ripples.length) return;
-    ctx.save();
-    for (const rip of this.ripples) {
-      ctx.beginPath();
-      ctx.ellipse(this.cx, this.cy, rip.r, rip.r * 0.76, 0, 0, Math.PI * 2);
-      ctx.lineWidth = 2.5;
-      ctx.strokeStyle = 'rgba(255, 23, 68, ' + (rip.alpha * 0.9).toFixed(2) + ')';
-      ctx.shadowColor = '#ff1744';
-      ctx.shadowBlur = 16;
-      ctx.stroke();
-    }
-    ctx.restore();
-  }
-
   drawHorizontalBeam(ctx) {
-    const cy = this.laserY;
-    const pulseBoost = this.coreEnergy;
+    const cy = this.baselineY;
 
     ctx.save();
     ctx.beginPath();
@@ -963,16 +745,78 @@ class OrbScanEngine {
 
     const grad = ctx.createLinearGradient(0, cy, this.width, cy);
     grad.addColorStop(0, 'rgba(255, 42, 59, 0)');
-    grad.addColorStop(0.2, 'rgba(255, 42, 59, ' + (0.35 + pulseBoost * 0.2).toFixed(2) + ')');
+    grad.addColorStop(0.2, 'rgba(255, 42, 59, 0.35)');
+    grad.addColorStop(0.45, '#ff2a3b');
     grad.addColorStop(0.5, '#ffffff');
-    grad.addColorStop(0.8, 'rgba(255, 42, 59, ' + (0.35 + pulseBoost * 0.2).toFixed(2) + ')');
+    grad.addColorStop(0.55, '#ff2a3b');
+    grad.addColorStop(0.8, 'rgba(255, 42, 59, 0.35)');
     grad.addColorStop(1, 'rgba(255, 42, 59, 0)');
 
     ctx.strokeStyle = grad;
-    ctx.lineWidth = 2.2 + pulseBoost * 1.5;
+    ctx.lineWidth = 2.2;
     ctx.shadowColor = '#ff1744';
-    ctx.shadowBlur = 18 + pulseBoost * 15;
+    ctx.shadowBlur = 22;
     ctx.stroke();
+
+    // Central optical laser flare point
+    const coreFlare = ctx.createRadialGradient(this.cx, cy, 0, this.cx, cy, 45);
+    coreFlare.addColorStop(0, 'rgba(255, 255, 255, 0.85)');
+    coreFlare.addColorStop(0.2, 'rgba(255, 42, 59, 0.6)');
+    coreFlare.addColorStop(1, 'rgba(255, 42, 59, 0)');
+    ctx.fillStyle = coreFlare;
+    ctx.beginPath();
+    ctx.arc(this.cx, cy, 45, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.restore();
+  }
+
+  drawHorizontalCharacters(ctx) {
+    ctx.save();
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+
+    for (const c of this.characters) {
+      if (c.opacity <= 0.01) continue;
+
+      ctx.save();
+      ctx.globalAlpha = c.opacity;
+
+      const isScanned = c.scanGlow > 0.1;
+      const isCenterFocal = c.scanGlow > 0.65;
+
+      if (isCenterFocal) {
+        // Center scanning laser focus: brilliant white-gold illumination
+        ctx.font = '800 20px ui-monospace, SFMono-Regular, "JetBrains Mono", Menlo, Consolas, monospace';
+        ctx.fillStyle = '#ffffff';
+        ctx.shadowColor = '#ffffff';
+        ctx.shadowBlur = 18;
+        ctx.fillText(c.char, c.x, c.y);
+
+        // Secondary laser corona glow
+        ctx.fillStyle = '#ffd54f';
+        ctx.shadowColor = '#ffd54f';
+        ctx.shadowBlur = 24;
+        ctx.fillText(c.char, c.x, c.y);
+      } else if (isScanned) {
+        // Entering scanning beam: bright glowing crimson-gold
+        ctx.font = '700 18px ui-monospace, SFMono-Regular, "JetBrains Mono", Menlo, Consolas, monospace';
+        ctx.fillStyle = '#ffffff';
+        ctx.shadowColor = '#ff2a3b';
+        ctx.shadowBlur = 14;
+        ctx.fillText(c.char, c.x, c.y);
+      } else {
+        // Standard horizontal stream: crisp, glowing cyber red monospace glyph (NO BOX)
+        ctx.font = '700 17px ui-monospace, SFMono-Regular, "JetBrains Mono", Menlo, Consolas, monospace';
+        ctx.fillStyle = 'rgba(255, 220, 225, 0.95)';
+        ctx.shadowColor = 'rgba(255, 42, 59, 0.85)';
+        ctx.shadowBlur = 9;
+        ctx.fillText(c.char, c.x, c.y);
+      }
+
+      ctx.restore();
+    }
+
     ctx.restore();
   }
 
@@ -991,21 +835,6 @@ class OrbScanEngine {
       ctx.shadowColor = '#ffd54f';
       ctx.shadowBlur = 10;
       ctx.stroke();
-    }
-    ctx.restore();
-  }
-
-  drawSparks(ctx) {
-    if (!this.sparks.length) return;
-    ctx.save();
-    for (const p of this.sparks) {
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
-      ctx.fillStyle = p.color;
-      ctx.globalAlpha = Math.max(0, p.alpha);
-      ctx.shadowColor = p.color;
-      ctx.shadowBlur = 8;
-      ctx.fill();
     }
     ctx.restore();
   }
