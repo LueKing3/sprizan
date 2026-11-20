@@ -251,8 +251,8 @@ class OrbScanEngine {
     this.canvas = canvas;
     this.ctx = canvas.getContext('2d');
     this.rawUrl = rawUrl || 'https://target-payload.net';
-    this.chars = this.rawUrl.split('');
-    if (this.chars.length === 0) this.chars = ['h', 't', 't', 'p', 's'];
+    this.urlChars = this.rawUrl.split('');
+    if (this.urlChars.length === 0) this.urlChars = ['h', 't', 't', 'p', 's'];
 
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     this.width = 640;
@@ -264,20 +264,50 @@ class OrbScanEngine {
     this.cx = this.width / 2;
     this.cy = this.height / 2;
     this.coreRadius = 126;
-    this.orbitRadius = 175;
-    this.orbitTilt = -0.24; // ~14 degrees inclination
+    this.spawnRadius = 295;
 
     this.running = false;
     this.animId = null;
-    this.streamProgress = 0;
     this.laserAngle = 0;
     this.laserY = this.cy;
 
+    // Orb energy and shockwaves
+    this.coreEnergy = 0;
+    this.ripples = [];
     this.sparks = [];
     this.lightningArcs = [];
     this.lightningTimer = 0;
     this.ambientEmbers = [];
+
+    // Initialize individual characters
+    this.initCharacters();
     this.initEmbers();
+  }
+
+  initCharacters() {
+    this.characters = [];
+    const total = this.urlChars.length;
+    // Visible characters on screen (staggered in inward spiral queue)
+    const count = Math.min(total, 32);
+    this.nextCharIndex = 0;
+
+    for (let i = 0; i < count; i++) {
+      const frac = i / count;
+      const radius = this.spawnRadius - frac * (this.spawnRadius - 25);
+      const angle = frac * Math.PI * 4.2;
+      this.characters.push({
+        char: this.urlChars[this.nextCharIndex],
+        charIndex: this.nextCharIndex,
+        angle: angle,
+        radius: radius,
+        inwardSpeed: 42 + (i % 5) * 4,
+        baseAngularSpeed: 0.85,
+        scale: 1.0,
+        alpha: 0.85,
+        beamFlash: 0
+      });
+      this.nextCharIndex = (this.nextCharIndex + 1) % total;
+    }
   }
 
   initEmbers() {
@@ -325,39 +355,92 @@ class OrbScanEngine {
   }
 
   update(dt) {
-    // 1. URL characters stream advance (character by character)
-    const baseSpeed = this.chars.length > 50 ? 0.08 : 0.13;
-    this.streamProgress = (this.streamProgress + baseSpeed * dt) % 1.0;
+    // Decay core energy pulse
+    this.coreEnergy = Math.max(0, this.coreEnergy - dt * 1.5);
 
-    // 2. Horizontal Laser Oscillation
+    // Laser vertical oscillation
     this.laserAngle += dt * 1.8;
     this.laserY = this.cy + Math.sin(this.laserAngle) * 22;
 
-    // 3. Very subtle golden lightning (Occasional micro-arc every 35-60 frames)
+    // 1. Update Inward Spiraling Characters (Gravitational Attraction & Inward Acceleration)
+    const total = this.urlChars.length;
+    for (const c of this.characters) {
+      const rRatio = Math.min(1.0, Math.max(0.05, c.radius / this.spawnRadius));
+      const invRatio = Math.max(0, 1 - rRatio);
+
+      // Gravitational acceleration: angular speed accelerates as radius shrinks!
+      const angularSpeed = c.baseAngularSpeed * (1 + Math.pow(invRatio, 1.8) * 4.4);
+      c.angle += angularSpeed * dt;
+
+      // Inward radial acceleration
+      const radialPull = c.inwardSpeed * (1 + Math.pow(invRatio, 1.4) * 2.4);
+      c.radius -= radialPull * dt;
+
+      // Position in 2D perspective space
+      const x = this.cx + c.radius * Math.cos(c.angle);
+      const y = this.cy + c.radius * 0.62 * Math.sin(c.angle);
+
+      // Beam intersection detection
+      const dy = Math.abs(y - this.laserY);
+      if (dy < 20 && c.radius < this.coreRadius + 30) {
+        c.beamFlash = Math.min(1.0, c.beamFlash + dt * 8);
+        if (Math.random() < 0.2) {
+          this.spawnCharSpark(x, y, '#ffd54f');
+        }
+      } else {
+        c.beamFlash = Math.max(0, c.beamFlash - dt * 3.5);
+      }
+
+      // Singular Ingestion Event:
+      // Characters spiral faster near center, then vanish in a bright red pulse!
+      if (c.radius <= 18) {
+        this.triggerCoreAbsorption(x, y);
+
+        // Respawn at outer spawn perimeter with next character from queue
+        c.char = this.urlChars[this.nextCharIndex];
+        c.charIndex = this.nextCharIndex;
+        this.nextCharIndex = (this.nextCharIndex + 1) % total;
+        c.radius = this.spawnRadius - Math.random() * 15;
+        c.angle = c.angle + Math.PI * (0.8 + Math.random() * 0.4);
+        c.beamFlash = 0;
+        c.alpha = 0.85;
+      }
+    }
+
+    // 2. Update shockwave ripples
+    for (let i = this.ripples.length - 1; i >= 0; i--) {
+      const rip = this.ripples[i];
+      rip.r += rip.speed;
+      rip.alpha -= dt * 1.8;
+      if (rip.alpha <= 0 || rip.r >= rip.maxR) {
+        this.ripples.splice(i, 1);
+      }
+    }
+
+    // 3. Update golden electrical arcs
     this.lightningTimer++;
-    if (this.lightningTimer > 36 && Math.random() < 0.08) {
+    if (this.lightningTimer > 35 && (this.coreEnergy > 0.3 || Math.random() < 0.08)) {
       this.spawnLightningArc();
       this.lightningTimer = 0;
     }
 
-    // Update lightning arcs (short duration 3-4 frames)
     for (let i = this.lightningArcs.length - 1; i >= 0; i--) {
       const arc = this.lightningArcs[i];
-      arc.life -= dt * 9;
+      arc.life -= dt * 8.5;
       if (arc.life <= 0) this.lightningArcs.splice(i, 1);
     }
 
-    // 4. Update golden sparks
+    // 4. Update golden & crimson sparks
     for (let i = this.sparks.length - 1; i >= 0; i--) {
       const p = this.sparks[i];
       p.x += p.vx;
       p.y += p.vy;
       p.vy += 0.04;
-      p.alpha -= dt * 2.2;
+      p.alpha -= dt * 2.4;
       if (p.alpha <= 0) this.sparks.splice(i, 1);
     }
 
-    // 5. Ambient embers
+    // 5. Update ambient embers
     for (const e of this.ambientEmbers) {
       e.x += e.vx;
       e.y += e.vy;
@@ -365,6 +448,33 @@ class OrbScanEngine {
         e.y = this.cy + 240;
         e.x = this.cx + (Math.random() - 0.5) * 400;
       }
+    }
+  }
+
+  triggerCoreAbsorption(x, y) {
+    this.coreEnergy = Math.min(1.0, this.coreEnergy + 0.32);
+
+    if (this.ripples.length < 8) {
+      this.ripples.push({
+        r: 18,
+        maxR: 240,
+        alpha: 0.95,
+        speed: 6.2
+      });
+    }
+
+    for (let i = 0; i < 4; i++) {
+      const ang = Math.random() * Math.PI * 2;
+      const spd = 1.2 + Math.random() * 2.2;
+      this.sparks.push({
+        x: x || this.cx,
+        y: y || this.cy,
+        vx: Math.cos(ang) * spd,
+        vy: Math.sin(ang) * spd,
+        alpha: 1.0,
+        size: 1.5 + Math.random() * 2,
+        color: Math.random() > 0.3 ? '#ff1744' : '#ffd54f'
+      });
     }
   }
 
@@ -389,8 +499,8 @@ class OrbScanEngine {
     this.lightningArcs.push({ pts, life: 1.0 });
   }
 
-  spawnCharSpark(x, y) {
-    if (this.sparks.length > 30) return;
+  spawnCharSpark(x, y, color = '#ffd54f') {
+    if (this.sparks.length > 35) return;
     for (let i = 0; i < 2; i++) {
       const angle = Math.random() * Math.PI * 2;
       const speed = 0.8 + Math.random() * 1.8;
@@ -398,10 +508,10 @@ class OrbScanEngine {
         x,
         y,
         vx: Math.cos(angle) * speed,
-        vy: Math.sin(angle) * speed - 0.5,
+        vy: Math.sin(angle) * speed - 0.4,
         alpha: 0.95,
         size: 1 + Math.random() * 1.5,
-        color: Math.random() > 0.4 ? '#ffd54f' : '#fff9c4'
+        color
       });
     }
   }
@@ -413,103 +523,22 @@ class OrbScanEngine {
     // 1. Draw ambient embers in deep background
     this.drawEmbers(ctx);
 
-    // 2. Pre-calculate all character positions in 3D orbit
-    const N = this.chars.length;
-    const spacing = 1.0 / Math.max(N, 16);
-    const charList = [];
+    // 2. Draw shockwave ripples from character absorptions
+    this.drawRipples(ctx);
 
-    for (let k = 0; k < N; k++) {
-      const u = (this.streamProgress + k * spacing) % 1.0;
-      const theta = u * Math.PI * 2;
-
-      // 3D coordinates on inclined ellipse
-      const x0 = this.orbitRadius * Math.cos(theta);
-      const y0 = this.orbitRadius * 0.40 * Math.sin(theta);
-      const z0 = this.orbitRadius * Math.sin(theta);
-
-      // Apply inclination tilt alpha
-      const cosA = Math.cos(this.orbitTilt);
-      const sinA = Math.sin(this.orbitTilt);
-      const x = this.cx + (x0 * cosA - y0 * sinA);
-      const y = this.cy + (x0 * sinA + y0 * cosA);
-
-      charList.push({
-        char: this.chars[k],
-        x,
-        y,
-        z0,
-        idx: k
-      });
-    }
-
-    // 3. Draw Back Characters (z0 < 0, behind the orb core)
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-
-    for (const c of charList) {
-      if (c.z0 < 0) {
-        const depthFrac = (c.z0 + this.orbitRadius) / this.orbitRadius;
-        const alpha = 0.25 + depthFrac * 0.25;
-        ctx.font = '600 13px ui-monospace, SFMono-Regular, "JetBrains Mono", Courier, monospace';
-        ctx.fillStyle = 'rgba(255, 60, 75, ' + alpha.toFixed(2) + ')';
-        ctx.shadowBlur = 4;
-        ctx.shadowColor = 'rgba(255, 42, 59, 0.4)';
-        ctx.fillText(c.char, c.x, c.y);
-      }
-    }
-
-    // 4. Draw 3D Spherical Scanning Core
+    // 3. Draw 3D Spherical Core (reacts dynamically to coreEnergy)
     this.drawSphereCore(ctx);
 
-    // 5. Draw Front Characters (z0 >= 0, passing through front of the orb)
-    for (const c of charList) {
-      if (c.z0 >= 0) {
-        const depthFrac = c.z0 / this.orbitRadius;
-        const dy = Math.abs(c.y - this.laserY);
-        const dx = Math.abs(c.x - this.cx);
+    // 4. Draw Characters Swirling Inward Along Gravitational Spiral
+    this.drawCharacters(ctx);
 
-        // ILLUMINATION LOGIC: character intersects horizontal laser beam
-        if (dy < 24 && dx < this.coreRadius + 45) {
-          const prox = 1 - (dy / 24);
-          const scale = 1.0 + prox * 0.35;
-          const fontSize = Math.round(15 * scale);
-
-          ctx.font = '800 ' + fontSize + 'px ui-monospace, SFMono-Regular, "JetBrains Mono", Courier, monospace';
-
-          // Color shift to brilliant white-gold on beam intersection!
-          if (prox > 0.55) {
-            ctx.fillStyle = '#ffffff';
-            ctx.shadowColor = '#ffe082';
-            ctx.shadowBlur = 18 + prox * 10;
-            if (dy < 8 && Math.random() < 0.25) {
-              this.spawnCharSpark(c.x, c.y);
-            }
-          } else {
-            ctx.fillStyle = '#ffdede';
-            ctx.shadowColor = '#ffd54f';
-            ctx.shadowBlur = 12;
-          }
-
-          ctx.fillText(c.char, c.x, c.y);
-        } else {
-          // Standard front glowing character
-          const fontSize = Math.round(14 + depthFrac * 2);
-          ctx.font = '700 ' + fontSize + 'px ui-monospace, SFMono-Regular, "JetBrains Mono", Courier, monospace';
-          ctx.fillStyle = '#ff5765';
-          ctx.shadowColor = '#ff2a3b';
-          ctx.shadowBlur = 8 + depthFrac * 6;
-          ctx.fillText(c.char, c.x, c.y);
-        }
-      }
-    }
-
-    // 6. Draw Continuous Horizontal Red Energy Beam across the orb
+    // 5. Draw Continuous Horizontal Red Energy Beam across the orb
     this.drawHorizontalBeam(ctx);
 
-    // 7. Draw Subtle Golden Lightning Arcs
+    // 6. Draw Subtle Golden Lightning Arcs
     this.drawLightning(ctx);
 
-    // 8. Draw Golden Sparks
+    // 7. Draw Sparks
     this.drawSparks(ctx);
   }
 
@@ -517,6 +546,7 @@ class OrbScanEngine {
     const cx = this.cx;
     const cy = this.cy;
     const R = this.coreRadius;
+    const pulseBoost = this.coreEnergy;
 
     ctx.save();
 
@@ -524,22 +554,22 @@ class OrbScanEngine {
     ctx.beginPath();
     ctx.arc(cx, cy, R, 0, Math.PI * 2);
 
-    // 3D Shaded Sphere Fill
+    // 3D Shaded Sphere Fill with Dynamic Energy Pulse
     const grad = ctx.createRadialGradient(cx - 30, cy - 35, 15, cx, cy, R);
-    grad.addColorStop(0, '#1a2027');
-    grad.addColorStop(0.5, '#0b0e12');
+    grad.addColorStop(0, '#1c222a');
+    grad.addColorStop(0.45, '#0c0f14');
     grad.addColorStop(0.85, '#040507');
-    grad.addColorStop(1, '#ff1a2e'); // Red Fresnel rim glow
+    grad.addColorStop(1, pulseBoost > 0.2 ? '#ff2a3b' : '#d81b60');
     ctx.fillStyle = grad;
-    ctx.shadowColor = 'rgba(255, 42, 59, 0.85)';
-    ctx.shadowBlur = 35;
+    ctx.shadowColor = pulseBoost > 0.3 ? '#ff1744' : 'rgba(255, 42, 59, 0.85)';
+    ctx.shadowBlur = 35 + pulseBoost * 30;
     ctx.fill();
 
     // Procedural Tech Latitude Lines on Sphere Surface
     ctx.clip();
     ctx.shadowBlur = 0;
     ctx.lineWidth = 1;
-    ctx.strokeStyle = 'rgba(255, 42, 59, 0.12)';
+    ctx.strokeStyle = 'rgba(255, 42, 59, ' + (0.12 + pulseBoost * 0.18).toFixed(2) + ')';
 
     for (let lat = -60; lat <= 60; lat += 24) {
       const yLat = cy + (lat / 90) * R;
@@ -549,13 +579,96 @@ class OrbScanEngine {
       ctx.stroke();
     }
 
+    // Inner Absorption Core Glow (Flashes bright red when characters enter)
+    if (pulseBoost > 0.05) {
+      const coreFlash = ctx.createRadialGradient(cx, cy, 0, cx, cy, R * 0.75);
+      coreFlash.addColorStop(0, 'rgba(255, 255, 255, ' + (0.35 * pulseBoost).toFixed(2) + ')');
+      coreFlash.addColorStop(0.3, 'rgba(255, 42, 59, ' + (0.65 * pulseBoost).toFixed(2) + ')');
+      coreFlash.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = coreFlash;
+      ctx.fill();
+    }
+
     // Inner Rim Shadow/Vignette
     const innerRim = ctx.createRadialGradient(cx, cy, R * 0.72, cx, cy, R);
     innerRim.addColorStop(0, 'rgba(0,0,0,0)');
     innerRim.addColorStop(0.9, 'rgba(0,0,0,0.6)');
-    innerRim.addColorStop(1, 'rgba(255, 30, 45, 0.65)');
+    innerRim.addColorStop(1, 'rgba(255, 30, 45, ' + (0.65 + pulseBoost * 0.3).toFixed(2) + ')');
     ctx.fillStyle = innerRim;
     ctx.fill();
+
+    ctx.restore();
+  }
+
+  drawCharacters(ctx) {
+    ctx.save();
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+
+    for (const c of this.characters) {
+      const x = this.cx + c.radius * Math.cos(c.angle);
+      const y = this.cy + c.radius * 0.62 * Math.sin(c.angle);
+
+      const isInsideCore = c.radius < this.coreRadius;
+      const isNearSingularity = c.radius < 32;
+
+      ctx.save();
+      ctx.translate(x, y);
+
+      const rot = c.angle + Math.PI / 2;
+      ctx.rotate(rot * 0.25);
+
+      if (isNearSingularity) {
+        // Accelerating and flashing bright before vanishing in pulse!
+        ctx.font = '800 18px ui-monospace, SFMono-Regular, "JetBrains Mono", Courier, monospace';
+        ctx.fillStyle = '#ffffff';
+        ctx.shadowColor = '#ff1744';
+        ctx.shadowBlur = 24;
+        ctx.fillText(c.char, 0, 0);
+      } else if (c.beamFlash > 0.1) {
+        // Crossing horizontal scanning beam: white-gold brilliance!
+        const scale = 1.0 + c.beamFlash * 0.35;
+        const fontSize = Math.round(15 * scale);
+        ctx.font = '800 ' + fontSize + 'px ui-monospace, SFMono-Regular, "JetBrains Mono", Courier, monospace';
+        ctx.fillStyle = c.beamFlash > 0.5 ? '#ffffff' : '#fff8e7';
+        ctx.shadowColor = '#ffd54f';
+        ctx.shadowBlur = 18 + c.beamFlash * 10;
+        ctx.fillText(c.char, 0, 0);
+      } else if (isInsideCore) {
+        // Inside 3D core: bright glowing crimson
+        ctx.font = '700 14px ui-monospace, SFMono-Regular, "JetBrains Mono", Courier, monospace';
+        ctx.fillStyle = '#ff4d5a';
+        ctx.shadowColor = '#ff2a3b';
+        ctx.shadowBlur = 12;
+        ctx.fillText(c.char, 0, 0);
+      } else {
+        // Outer spiral stream: crisp legible red monospace glyph
+        ctx.font = '600 13px ui-monospace, SFMono-Regular, "JetBrains Mono", Courier, monospace';
+        ctx.fillStyle = 'rgba(255, 90, 105, 0.85)';
+        ctx.shadowColor = 'rgba(255, 42, 59, 0.5)';
+        ctx.shadowBlur = 6;
+        ctx.fillText(c.char, 0, 0);
+      }
+
+      ctx.restore();
+    }
+
+    ctx.restore();
+  }
+
+  drawRipples(ctx) {
+    if (!this.ripples.length) return;
+    ctx.save();
+
+    for (const rip of this.ripples) {
+      ctx.beginPath();
+      ctx.ellipse(this.cx, this.cy, rip.r, rip.r * 0.78, 0, 0, Math.PI * 2);
+      ctx.strokeStyle = 'rgba(255, 42, 59, ' + (rip.alpha * 0.75).toFixed(2) + ')';
+      ctx.lineWidth = 2;
+      ctx.shadowColor = '#ff2a3b';
+      ctx.shadowBlur = 12;
+      ctx.stroke();
+    }
 
     ctx.restore();
   }
