@@ -170,39 +170,101 @@
           </div>
         </div>
 
-        <!-- Professional Laser Scanning Animation Stage (Cybersecurity Inspection) -->
+        <!-- Cinematic Cyber Threat Scanning Orb & Dragon Chamber (Reference UI) -->
         <div class="scan-stage hidden" id="scan-stage" aria-live="assertive">
-          <div class="scan-visual">
-            <div class="scan-grid"></div>
-            <div class="scan-glow-backdrop"></div>
-            <div class="scan-terminal">
-              <div class="scan-terminal-top">
-                <span class="scan-chip"><span class="scan-beacon"></span> CYBERSTREAM OPTICAL INSPECTION</span>
-                <span class="scan-chip mono" id="scan-phase-indicator">SYNTAX ANALYSIS</span>
-              </div>
-              <div class="scan-target-box">
-                <span class="scan-label mono">STREAMING PAYLOAD TO PARSER</span>
-                <div class="scan-url-wrapper">
-                  <div class="scan-url-display mono" id="scan-target">AWAITING TARGET URL</div>
-                  <div class="scan-beam-illuminator"></div>
+          <div class="scan-theater">
+            <!-- Background Dragon Silhouette & Ambient Crimson Atmosphere -->
+            <div class="scan-dragon-backdrop" aria-hidden="true">
+              <img src="./sprizan-dragon.png" alt="" class="scan-dragon-silhouette" />
+              <div class="scan-dragon-eye"></div>
+              <div class="scan-dragon-smoke"></div>
+            </div>
+
+            <!-- The Central 3D Scanning Orb Chamber -->
+            <div class="scan-orb-wrapper">
+              <!-- Ambient Halo Glow -->
+              <div class="orb-ambient-halo"></div>
+
+              <!-- Concentric Segmented Tech Rings (Matching Reference Image) -->
+              <div class="orb-ring ring-outer-neon"></div>
+              <div class="orb-ring ring-tech-ticks"></div>
+              <div class="orb-ring ring-segmented-magenta"></div>
+              <div class="orb-ring ring-segmented-amber"></div>
+              <div class="orb-ring ring-inner-circuit"></div>
+
+              <!-- High-Performance Canvas for 3D Sphere, Orbital URL Characters, Laser Beam & Lightning -->
+              <canvas id="scan-orb-canvas" width="640" height="640"></canvas>
+
+              <!-- Central Scanning Typography & Target URL Display -->
+              <div class="orb-center-overlay">
+                <div class="orb-scanning-title">SCANNING...</div>
+                <div class="orb-url-pill" id="scan-target-url" title="Analyzing Target URL">
+                  <span class="orb-url-text" id="scan-target">AWAITING TARGET URL</span>
                 </div>
               </div>
-              <div class="scan-status-strip">
-                <b id="scan-stage-title">PARSING URL SPECIFICATION</b>
-                <small id="scan-stage-sub">Validating protocol, domain boundaries, and character encoding</small>
+
+              <!-- Optical Anamorphic Horizontal Laser Flare Wings -->
+              <div class="orb-laser-rig">
+                <div class="laser-flare-wing left"></div>
+                <div class="laser-center-line"></div>
+                <div class="laser-flare-wing right"></div>
               </div>
             </div>
-            <!-- Precision horizontal red laser beam and reflections -->
-            <div class="scan-laser-beam"></div>
-            <div class="scan-laser-reflection"></div>
-          </div>
-          <div class="scan-progress">
-            <div class="progress-track"><i id="progress-fill"></i></div>
-            <div class="progress-steps">
-              <span class="step active">SYNTAX</span>
-              <span class="step">TOP DOMAINS</span>
-              <span class="step">COMMUNITY</span>
-              <span class="step">VERDICT</span>
+
+            <!-- Perspective Circular Ground Pedestal with Concentric Rings -->
+            <div class="scan-floor-pedestal" aria-hidden="true">
+              <div class="pedestal-ellipse ellipse-1"></div>
+              <div class="pedestal-ellipse ellipse-2"></div>
+              <div class="pedestal-ellipse ellipse-3"></div>
+              <div class="pedestal-spotlight"></div>
+            </div>
+
+            <!-- Four Investigation Stages Timeline (Matching Reference Image) -->
+            <div class="scan-timeline-container">
+              <div class="timeline-line-bg"></div>
+              <div class="timeline-line-fill" id="timeline-progress-fill"></div>
+              
+              <div class="timeline-stages">
+                <div class="timeline-stage" id="stage-node-1">
+                  <div class="stage-bullet">
+                    <div class="stage-bullet-ring"></div>
+                    <div class="stage-bullet-core"></div>
+                    <div class="stage-bullet-glow"></div>
+                  </div>
+                  <div class="stage-label">Analyzing Structure</div>
+                  <div class="stage-status" id="stage-status-1">INITIALIZING</div>
+                </div>
+
+                <div class="timeline-stage" id="stage-node-2">
+                  <div class="stage-bullet">
+                    <div class="stage-bullet-ring"></div>
+                    <div class="stage-bullet-core"></div>
+                    <div class="stage-bullet-glow"></div>
+                  </div>
+                  <div class="stage-label">Checking Threat Databases</div>
+                  <div class="stage-status" id="stage-status-2">PENDING</div>
+                </div>
+
+                <div class="timeline-stage" id="stage-node-3">
+                  <div class="stage-bullet">
+                    <div class="stage-bullet-ring"></div>
+                    <div class="stage-bullet-core"></div>
+                    <div class="stage-bullet-glow"></div>
+                  </div>
+                  <div class="stage-label">Evaluating Risk Factors</div>
+                  <div class="stage-status" id="stage-status-3">PENDING</div>
+                </div>
+
+                <div class="timeline-stage" id="stage-node-4">
+                  <div class="stage-bullet">
+                    <div class="stage-bullet-ring"></div>
+                    <div class="stage-bullet-core"></div>
+                    <div class="stage-bullet-glow"></div>
+                  </div>
+                  <div class="stage-label">Generating Report</div>
+                  <div class="stage-status" id="stage-status-4">PENDING</div>
+                </div>
+              </div>
             </div>
           </div>
         </div>

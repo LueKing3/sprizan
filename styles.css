@@ -829,228 +829,500 @@ body {
 }
 
 /* =========================================================
-   ISSUE 3 FIX: RESTORED HORIZONTAL RED LASER SCANNING BEAM
-   (Clean cybersecurity inspection terminal; NO gun reticle)
+   CINEMATIC CYBER THREAT SCANNING ORB & DRAGON CHAMBER
+   (Modeled with fidelity on the reference visual interface)
    ========================================================= */
 
 .scan-stage {
-  margin-top: 20px;
-  border: 1px solid #3c1e23;
-  border-radius: 12px;
-  background: radial-gradient(ellipse at 50% 50%, #160c10 0%, #0d1013 70%, #07090b 100%);
+  margin-top: 24px;
+  border: 1px solid rgba(255, 42, 59, 0.3);
+  border-radius: 18px;
+  background: radial-gradient(ellipse at 50% 25%, #18090d 0%, #0c0f13 52%, #040507 100%);
   overflow: hidden;
-  box-shadow: 0 0 45px rgba(240, 68, 75, 0.16);
-  animation: cardEntrance 0.35s ease;
+  box-shadow: 0 0 65px rgba(255, 42, 59, 0.16), inset 0 0 100px rgba(0, 0, 0, 0.88);
+  animation: cardEntrance 0.4s cubic-bezier(0.16, 1, 0.3, 1);
   position: relative;
+  padding: 34px 16px 36px;
 }
 
-.scan-visual {
-  height: 220px;
+.scan-theater {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 560px;
+  overflow: hidden;
+}
+
+/* Background Dragon Backdrop */
+.scan-dragon-backdrop {
+  position: absolute;
+  top: -48px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(540px, 95vw);
+  height: 420px;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.scan-dragon-silhouette {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  object-position: center top;
+  mix-blend-mode: screen;
+  opacity: 0.38;
+  filter: saturate(1.3) contrast(1.18) drop-shadow(0 0 45px rgba(255, 42, 59, 0.55));
+  animation: dragonBreathing 5s ease-in-out infinite;
+  mask-image: radial-gradient(ellipse at 50% 45%, black 45%, transparent 78%);
+  -webkit-mask-image: radial-gradient(ellipse at 50% 45%, black 45%, transparent 78%);
+}
+
+@keyframes dragonBreathing {
+  0%, 100% {
+    transform: scale(1) translateY(0);
+    opacity: 0.35;
+    filter: saturate(1.25) contrast(1.15) drop-shadow(0 0 40px rgba(255, 42, 59, 0.45));
+  }
+  50% {
+    transform: scale(1.025) translateY(-6px);
+    opacity: 0.48;
+    filter: saturate(1.4) contrast(1.25) drop-shadow(0 0 70px rgba(255, 42, 59, 0.8));
+  }
+}
+
+.scan-dragon-eye {
+  position: absolute;
+  top: 26%;
+  left: 52%;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow: 0 0 10px 3px #ffffff, 0 0 24px 6px #ff1744, 0 0 40px 12px rgba(255, 23, 68, 0.8);
+  animation: dragonEyePulse 3s ease-in-out infinite;
+}
+
+@keyframes dragonEyePulse {
+  0%, 100% { transform: scale(0.9); opacity: 0.7; }
+  50% { transform: scale(1.25); opacity: 1; box-shadow: 0 0 14px 4px #ffffff, 0 0 32px 8px #ff1744, 0 0 55px 16px rgba(255, 23, 68, 0.95); }
+}
+
+.scan-dragon-smoke {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at 50% 30%, rgba(255, 42, 59, 0.15) 0%, transparent 65%);
+  pointer-events: none;
+}
+
+/* Central Orb Chamber */
+.scan-orb-wrapper {
+  position: relative;
+  width: 440px;
+  height: 440px;
+  margin: 10px auto 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 5;
+}
+
+.orb-ambient-halo {
+  position: absolute;
+  width: 380px;
+  height: 380px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 42, 59, 0.28) 0%, rgba(255, 23, 68, 0.12) 52%, transparent 74%);
+  filter: blur(14px);
+  pointer-events: none;
+}
+
+/* Outer Concentric Tech Rings */
+.orb-ring {
+  position: absolute;
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+.ring-outer-neon {
+  width: 420px;
+  height: 420px;
+  border: 1px solid rgba(255, 42, 59, 0.18);
+  animation: orbRingClockwise 26s linear infinite;
+}
+
+.ring-tech-ticks {
+  width: 388px;
+  height: 388px;
+  border: 1px dashed rgba(255, 68, 85, 0.32);
+  animation: orbRingCounter 34s linear infinite;
+}
+
+/* Neon Segmented Arcs (Matching Reference Image) */
+.ring-segmented-magenta {
+  width: 366px;
+  height: 366px;
+  border: 3.5px solid transparent;
+  border-top-color: #ff1744;
+  border-left-color: #d81b60;
+  border-top-left-radius: 50%;
+  filter: drop-shadow(0 0 12px #ff1744);
+  animation: orbRingCounter 18s cubic-bezier(0.45, 0.05, 0.55, 0.95) infinite;
+}
+
+.ring-segmented-amber {
+  width: 366px;
+  height: 366px;
+  border: 3.5px solid transparent;
+  border-right-color: #ff9100;
+  border-bottom-color: #ffd600;
+  border-bottom-right-radius: 50%;
+  filter: drop-shadow(0 0 10px #ffb300);
+  animation: orbRingCounter 18s cubic-bezier(0.45, 0.05, 0.55, 0.95) infinite;
+}
+
+.ring-inner-circuit {
+  width: 300px;
+  height: 300px;
+  border: 1px solid rgba(255, 42, 59, 0.25);
+  box-shadow: inset 0 0 25px rgba(255, 42, 59, 0.22);
+  animation: orbRingClockwise 12s linear infinite;
+}
+
+@keyframes orbRingClockwise {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes orbRingCounter {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(-360deg); }
+}
+
+/* Interactive Canvas for 3D Core, Character Stream, Laser & Lightning */
+#scan-orb-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 6;
+  pointer-events: none;
+}
+
+/* Center Typography Display */
+.orb-center-overlay {
+  position: absolute;
+  z-index: 10;
+  text-align: center;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.orb-scanning-title {
+  font: 800 24px var(--sans);
+  color: #ffffff;
+  letter-spacing: 3.5px;
+  text-transform: uppercase;
+  text-shadow: 0 0 12px rgba(255, 255, 255, 0.95), 0 0 30px rgba(255, 42, 59, 0.95), 0 0 55px rgba(255, 42, 59, 0.6);
+  animation: scanningTextSheen 2.2s ease-in-out infinite;
+}
+
+@keyframes scanningTextSheen {
+  0%, 100% {
+    opacity: 0.95;
+    transform: scale(1);
+    text-shadow: 0 0 10px rgba(255, 255, 255, 0.9), 0 0 26px rgba(255, 42, 59, 0.85);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.02);
+    text-shadow: 0 0 16px #ffffff, 0 0 38px #ff2a3b, 0 0 65px rgba(255, 42, 59, 0.8);
+  }
+}
+
+.orb-url-pill {
+  max-width: 310px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: 600 12px var(--mono);
+  color: #ffebee;
+  background: rgba(9, 13, 17, 0.88);
+  padding: 5px 16px;
+  border-radius: 18px;
+  border: 1px solid rgba(255, 42, 59, 0.45);
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.85), 0 0 15px rgba(255, 42, 59, 0.35);
+  letter-spacing: 0.6px;
+  backdrop-filter: blur(8px);
+}
+
+.orb-url-text {
+  display: inline-block;
+  max-width: 280px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Anamorphic Horizontal Laser Flare Wings */
+.orb-laser-rig {
+  position: absolute;
+  left: -80px;
+  right: -80px;
+  height: 2px;
+  top: 50%;
+  transform: translateY(-50%);
+  pointer-events: none;
+  z-index: 8;
+  display: flex;
+  align-items: center;
+  animation: laserOscillation 2.2s ease-in-out infinite alternate;
+}
+
+@keyframes laserOscillation {
+  0% { transform: translateY(-16px); }
+  100% { transform: translateY(16px); }
+}
+
+.laser-center-line {
+  flex: 1;
+  height: 2px;
+  background: linear-gradient(90deg, transparent 0%, rgba(255, 42, 59, 0.4) 15%, #ff2a3b 45%, #ffffff 50%, #ff2a3b 55%, rgba(255, 42, 59, 0.4) 85%, transparent 100%);
+  box-shadow: 0 0 8px #ff2a3b, 0 0 22px rgba(255, 42, 59, 0.9), 0 0 45px rgba(255, 42, 59, 0.5);
+}
+
+.laser-flare-wing {
+  width: 90px;
+  height: 2px;
+  background: linear-gradient(90deg, #ff2a3b, transparent);
+  filter: blur(1px);
+}
+
+.laser-flare-wing.left {
+  transform: rotate(180deg);
+}
+
+/* Ground Perspective Platform Pedestal */
+.scan-floor-pedestal {
+  position: relative;
+  width: 480px;
+  height: 90px;
+  margin-top: -38px;
+  z-index: 2;
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.pedestal-ellipse {
+  position: absolute;
+  border-radius: 50%;
+  transform: perspective(400px) rotateX(72deg);
+}
+
+.ellipse-1 {
+  width: 440px;
+  height: 140px;
+  border: 1.5px solid rgba(255, 42, 59, 0.45);
+  box-shadow: 0 0 25px rgba(255, 42, 59, 0.55), inset 0 0 20px rgba(255, 42, 59, 0.35);
+}
+
+.ellipse-2 {
+  width: 360px;
+  height: 110px;
+  border: 1.5px dashed rgba(255, 42, 59, 0.35);
+}
+
+.ellipse-3 {
+  width: 270px;
+  height: 80px;
+  border: 2px solid rgba(255, 42, 59, 0.65);
+  box-shadow: 0 0 35px rgba(255, 42, 59, 0.7);
+}
+
+.pedestal-spotlight {
+  position: absolute;
+  width: 320px;
+  height: 70px;
+  border-radius: 50%;
+  background: radial-gradient(ellipse at 50% 50%, rgba(255, 42, 59, 0.32) 0%, transparent 70%);
+  filter: blur(8px);
+}
+
+/* Four Investigation Stages Timeline (Reference Design) */
+.scan-timeline-container {
+  position: relative;
+  width: min(840px, 94%);
+  margin: 32px auto 0;
+  padding: 16px 20px;
+  z-index: 8;
+}
+
+.timeline-line-bg {
+  position: absolute;
+  top: 27px;
+  left: 60px;
+  right: 60px;
+  height: 2px;
+  background: #251419;
+  z-index: 1;
+}
+
+.timeline-line-fill {
+  position: absolute;
+  top: 27px;
+  left: 60px;
+  height: 2px;
+  width: 0%;
+  background: linear-gradient(90deg, #ff2a3b, #ff7a00, #ffd600);
+  box-shadow: 0 0 12px #ff2a3b;
+  z-index: 2;
+  transition: width 0.45s ease;
+}
+
+.timeline-stages {
+  display: flex;
+  justify-content: space-between;
+  position: relative;
+  z-index: 3;
+}
+
+.timeline-stage {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  max-width: 175px;
+  transition: all 0.35s ease;
+}
+
+.stage-bullet {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 2px solid #431f25;
+  background: #090d10;
   position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
-  overflow: hidden;
+  margin-bottom: 10px;
+  transition: all 0.35s ease;
 }
 
-.scan-grid {
-  position: absolute;
-  inset: 0;
-  background-image:
-    linear-gradient(rgba(240, 68, 75, 0.05) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(240, 68, 75, 0.05) 1px, transparent 1px);
-  background-size: 28px 28px;
-  mask-image: radial-gradient(ellipse, black 40%, transparent 85%);
-  pointer-events: none;
-}
-
-.scan-glow-backdrop {
-  position: absolute;
-  width: 420px;
-  height: 180px;
+.stage-bullet-core {
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
-  background: radial-gradient(ellipse, rgba(240, 68, 75, 0.12) 0%, transparent 70%);
-  pointer-events: none;
+  background: #55252c;
+  transition: all 0.35s ease;
 }
 
-/* Laser Terminal Chamber */
-.scan-terminal {
-  position: relative;
-  z-index: 5;
-  width: min(720px, 92%);
-  background: rgba(11, 15, 19, 0.94);
-  border: 1px solid #331e24;
-  border-radius: 8px;
-  padding: 16px 22px;
-  backdrop-filter: blur(8px);
-  box-shadow: 0 12px 35px rgba(0, 0, 0, 0.8), 0 0 20px rgba(240, 68, 75, 0.1);
-}
-
-.scan-terminal-top {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 12px;
-  padding-bottom: 8px;
-  border-bottom: 1px solid #1a2228;
-}
-
-.scan-chip {
-  font: 700 9px var(--mono);
-  color: #c5d1d6;
-  letter-spacing: 1px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.scan-beacon {
-  width: 7px;
-  height: 7px;
+.stage-bullet-glow {
+  position: absolute;
+  inset: -6px;
   border-radius: 50%;
-  background: var(--red);
-  box-shadow: 0 0 10px var(--red);
-  animation: pulseDot 1.4s infinite;
+  opacity: 0;
+  transition: opacity 0.35s;
 }
 
-.scan-target-box {
-  margin-bottom: 12px;
+.stage-label {
+  font: 600 12px var(--sans);
+  color: #8c9da7;
+  line-height: 1.35;
+  transition: all 0.35s;
 }
 
-.scan-label {
-  display: block;
-  font: 700 8px var(--mono);
-  color: var(--text-dim);
-  letter-spacing: 1.2px;
-  margin-bottom: 4px;
-}
-
-.scan-url-wrapper {
-  position: relative;
-  background: #080b0e;
-  border: 1px solid #202b33;
-  border-radius: 5px;
-  padding: 10px 14px;
-  overflow: hidden;
-}
-
-.scan-url-display {
-  font: 12px var(--mono);
-  color: #ff9196;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  letter-spacing: 0.6px;
-  position: relative;
-  z-index: 2;
-  animation: textSheen 2.2s ease-in-out infinite;
-}
-
-@keyframes textSheen {
-  0%, 100% { color: #ff858a; text-shadow: 0 0 8px rgba(240, 68, 75, 0.3); }
-  50% { color: #ffffff; text-shadow: 0 0 16px rgba(255, 68, 75, 0.95); }
-}
-
-.scan-beam-illuminator {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  width: 90px;
-  background: linear-gradient(90deg, transparent, rgba(255, 68, 75, 0.3) 50%, transparent);
-  animation: illuminatorSweep 2.2s cubic-bezier(0.45, 0, 0.55, 1) infinite;
-  pointer-events: none;
-}
-
-@keyframes illuminatorSweep {
-  0% { left: -100px; }
-  50% { left: 100%; }
-  100% { left: -100px; }
-}
-
-.scan-status-strip {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  font-size: 11px;
-}
-
-.scan-status-strip b {
-  font: 700 10px var(--mono);
-  color: var(--red);
-  letter-spacing: 1.2px;
-}
-
-.scan-status-strip small {
-  color: var(--text-muted);
-  font: 9px var(--mono);
-}
-
-/* Horizontal Laser Beam */
-.scan-laser-beam {
-  position: absolute;
-  left: 0;
-  right: 0;
-  height: 2px;
-  background: #ff2a3b;
-  box-shadow: 0 0 8px 2px #ff2a3b, 0 0 20px 5px rgba(255, 42, 59, 0.8), 0 0 45px 12px rgba(240, 68, 75, 0.38);
-  animation: laserVerticalSweep 2.2s cubic-bezier(0.45, 0, 0.55, 1) infinite;
-  z-index: 8;
-  pointer-events: none;
-}
-
-.scan-laser-reflection {
-  position: absolute;
-  left: 0;
-  right: 0;
-  height: 38px;
-  background: linear-gradient(180deg, transparent, rgba(255, 42, 59, 0.12) 45%, rgba(255, 42, 59, 0.35) 50%, rgba(255, 42, 59, 0.12) 55%, transparent);
-  filter: blur(5px);
-  animation: laserVerticalSweep 2.2s cubic-bezier(0.45, 0, 0.55, 1) infinite;
-  z-index: 7;
-  pointer-events: none;
-}
-
-@keyframes laserVerticalSweep {
-  0% { top: 22%; opacity: 0.35; }
-  20% { opacity: 1; }
-  50% { top: 78%; opacity: 1; }
-  80% { opacity: 1; }
-  100% { top: 22%; opacity: 0.35; }
-}
-
-.scan-progress {
-  padding: 14px 24px 18px;
-  background: rgba(10, 13, 17, 0.95);
-  border-top: 1px solid #28191d;
-}
-
-.progress-track {
-  height: 4px;
-  background: #181d22;
-  border-radius: 6px;
-  overflow: hidden;
-}
-
-.progress-track i {
-  display: block;
-  height: 100%;
-  width: 0;
-  background: linear-gradient(90deg, #a91e28, #ff4c55);
-  box-shadow: 0 0 12px rgba(255, 76, 85, 0.8);
-  transition: width 0.35s ease;
-}
-
-.progress-steps {
-  display: flex;
-  justify-content: space-between;
-  margin-top: 10px;
-  color: #5d6e78;
+.stage-status {
   font: 700 9px var(--mono);
-  letter-spacing: 1px;
+  color: #55656e;
+  letter-spacing: 0.8px;
+  margin-top: 6px;
+  padding: 2px 7px;
+  border-radius: 4px;
+  background: rgba(16, 22, 27, 0.75);
+  border: 1px solid transparent;
+  transition: all 0.35s;
 }
 
-.progress-steps .step.active {
-  color: #ff6a71;
+/* Active Stage */
+.timeline-stage.active .stage-bullet {
+  border-color: #ff2a3b;
+  box-shadow: 0 0 16px rgba(255, 42, 59, 0.85);
+  background: #170b0e;
+}
+
+.timeline-stage.active .stage-bullet-core {
+  background: #ffffff;
+  box-shadow: 0 0 10px #ffffff, 0 0 18px #ff2a3b;
+}
+
+.timeline-stage.active .stage-bullet-glow {
+  opacity: 1;
+  background: radial-gradient(circle, rgba(255, 42, 59, 0.35) 0%, transparent 70%);
+  animation: stagePulse 1.4s ease-in-out infinite;
+}
+
+@keyframes stagePulse {
+  0%, 100% { transform: scale(1); opacity: 0.6; }
+  50% { transform: scale(1.4); opacity: 1; }
+}
+
+.timeline-stage.active .stage-label {
+  color: #ffffff;
+  font-weight: 700;
+  text-shadow: 0 0 10px rgba(255, 42, 59, 0.5);
+}
+
+.timeline-stage.active .stage-status {
+  color: #ff646e;
+  background: rgba(255, 42, 59, 0.16);
+  border-color: rgba(255, 42, 59, 0.45);
+  box-shadow: 0 0 10px rgba(255, 42, 59, 0.3);
+}
+
+/* Completed Stage */
+.timeline-stage.completed .stage-bullet {
+  border-color: #2ed573;
+  background: #081a11;
+  box-shadow: 0 0 14px rgba(46, 213, 115, 0.6);
+}
+
+.timeline-stage.completed .stage-bullet-core {
+  background: #2ed573;
+  box-shadow: 0 0 8px #2ed573;
+}
+
+.timeline-stage.completed .stage-label {
+  color: #d2ded7;
+}
+
+.timeline-stage.completed .stage-status {
+  color: #2ed573;
+  background: rgba(46, 213, 115, 0.12);
+  border-color: rgba(46, 213, 115, 0.32);
+}
+
+/* Standalone / Offline Notice for Stage 2 if feed unconfigured */
+.timeline-stage.standalone .stage-bullet {
+  border-color: #ffb142;
+  background: #19140a;
+}
+.timeline-stage.standalone .stage-bullet-core {
+  background: #ffb142;
+}
+.timeline-stage.standalone .stage-status {
+  color: #ffb142;
+  background: rgba(255, 177, 66, 0.12);
+  border-color: rgba(255, 177, 66, 0.35);
 }
 
 /* =========================================================
@@ -1933,15 +2205,66 @@ footer b {
     width: 100%;
   }
 
-  .scan-terminal {
-    width: 98%;
-    padding: 12px 14px;
+  /* Responsive Scanning Theater (Mobile) */
+  .scan-orb-wrapper {
+    width: 290px;
+    height: 290px;
   }
 
-  .scan-status-strip {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 4px;
+  .ring-outer-neon { width: 280px; height: 280px; }
+  .ring-tech-ticks { width: 260px; height: 260px; }
+  .ring-segmented-magenta, .ring-segmented-amber { width: 245px; height: 245px; }
+  .ring-inner-circuit { width: 200px; height: 200px; }
+
+  .scan-dragon-backdrop {
+    width: 320px;
+    height: 260px;
+    opacity: 0.28;
+    top: -20px;
+  }
+
+  .orb-scanning-title {
+    font-size: 19px;
+    letter-spacing: 2px;
+  }
+
+  .orb-url-pill {
+    max-width: 230px;
+    font-size: 11px;
+    padding: 3px 10px;
+  }
+
+  .scan-floor-pedestal {
+    width: 300px;
+    height: 60px;
+    margin-top: -24px;
+  }
+
+  .ellipse-1 { width: 280px; height: 90px; }
+  .ellipse-2 { width: 230px; height: 70px; }
+  .ellipse-3 { width: 170px; height: 50px; }
+
+  .scan-timeline-container {
+    padding: 12px 6px;
+    margin-top: 18px;
+  }
+
+  .timeline-line-bg, .timeline-line-fill {
+    display: none;
+  }
+
+  .timeline-stages {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 16px 8px;
+  }
+
+  .timeline-stage {
+    max-width: none;
+  }
+
+  .stage-label {
+    font-size: 11px;
   }
 
   footer {

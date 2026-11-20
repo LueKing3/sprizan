@@ -237,47 +237,520 @@ function renderSources() {
   `).join('');
 }
 
+
 /**
- * Laser Scanning Animation Engine
- * Coordinates horizontal laser beam, progress bar, and stage titles.
+ * =========================================================
+ * CINEMATIC CYBER SCANNING ORB ENGINE (CANVAS 60FPS)
+ * Recreating reference interface with animated 3D sphere,
+ * URL characters traveling in 3D orbit, horizontal laser
+ * beam, and subtle golden lightning / sparks.
+ * =========================================================
  */
-function stageProgress() {
-  const stages = [
-    { phase: 'PHASE 1: SYNTAX CHECK', title: 'PARSING URL STRUCTURE & SPECIFICATION', sub: 'Inspecting scheme, domain boundaries, and character encoding' },
-    { phase: 'PHASE 2: TOP DOMAINS', title: 'CHECKING 1,000 LEGITIMATE TOP DOMAINS', sub: 'Evaluating registered domain and typosquatting edit distance' },
-    { phase: 'PHASE 3: COMMUNITY FEED', title: 'CROSS-CHECKING THREAT REPUTATION', sub: 'Querying free community URLhaus malware signatures' },
-    { phase: 'PHASE 4: CORRELATION', title: 'COMPILING TELEMETRY & VERDICT', sub: 'Finalizing severity index and explainable security report' }
-  ];
+class OrbScanEngine {
+  constructor(canvas, rawUrl) {
+    this.canvas = canvas;
+    this.ctx = canvas.getContext('2d');
+    this.rawUrl = rawUrl || 'https://target-payload.net';
+    this.chars = this.rawUrl.split('');
+    if (this.chars.length === 0) this.chars = ['h', 't', 't', 'p', 's'];
 
-  let currentIdx = 0;
-  const phaseIndicator = $('#scan-phase-indicator');
-  const title = $('#scan-stage-title');
-  const sub = $('#scan-stage-sub');
-  const fill = $('#progress-fill');
-  const steps = $$('.progress-steps .step');
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    this.width = 640;
+    this.height = 640;
+    this.canvas.width = this.width * dpr;
+    this.canvas.height = this.height * dpr;
+    this.ctx.scale(dpr, dpr);
 
-  const updateUI = () => {
-    if (currentIdx < stages.length) {
-      const s = stages[currentIdx];
-      if (phaseIndicator) phaseIndicator.textContent = s.phase;
-      if (title) title.textContent = s.title;
-      if (sub) sub.textContent = s.sub;
-      if (fill) fill.style.width = ((currentIdx + 1) * 25) + '%';
-      steps.forEach((stepEl, n) => stepEl.classList.toggle('active', n <= currentIdx));
-      currentIdx++;
+    this.cx = this.width / 2;
+    this.cy = this.height / 2;
+    this.coreRadius = 126;
+    this.orbitRadius = 175;
+    this.orbitTilt = -0.24; // ~14 degrees inclination
+
+    this.running = false;
+    this.animId = null;
+    this.streamProgress = 0;
+    this.laserAngle = 0;
+    this.laserY = this.cy;
+
+    this.sparks = [];
+    this.lightningArcs = [];
+    this.lightningTimer = 0;
+    this.ambientEmbers = [];
+    this.initEmbers();
+  }
+
+  initEmbers() {
+    this.ambientEmbers = [];
+    for (let i = 0; i < 28; i++) {
+      this.ambientEmbers.push({
+        x: this.cx + (Math.random() - 0.5) * 440,
+        y: this.cy + (Math.random() - 0.5) * 440,
+        vx: (Math.random() - 0.5) * 0.4,
+        vy: -0.4 - Math.random() * 0.7,
+        size: 1 + Math.random() * 2,
+        alpha: 0.15 + Math.random() * 0.45,
+        color: Math.random() > 0.85 ? '#ffd54f' : '#ff2a3b'
+      });
     }
-  };
+  }
 
-  updateUI();
-  const timer = setInterval(() => {
-    if (currentIdx < stages.length) updateUI();
-    else clearInterval(timer);
-  }, 650);
+  start() {
+    this.running = true;
+    let lastTime = performance.now();
 
-  return () => {
-    clearInterval(timer);
-  };
+    const loop = (now) => {
+      if (!this.running) return;
+      const dt = Math.min((now - lastTime) / 1000, 0.1);
+      lastTime = now;
+
+      this.update(dt);
+      this.draw();
+
+      this.animId = requestAnimationFrame(loop);
+    };
+
+    this.animId = requestAnimationFrame(loop);
+  }
+
+  stop() {
+    this.running = false;
+    if (this.animId) {
+      cancelAnimationFrame(this.animId);
+      this.animId = null;
+    }
+    if (this.ctx) {
+      this.ctx.clearRect(0, 0, this.width, this.height);
+    }
+  }
+
+  update(dt) {
+    // 1. URL characters stream advance (character by character)
+    const baseSpeed = this.chars.length > 50 ? 0.08 : 0.13;
+    this.streamProgress = (this.streamProgress + baseSpeed * dt) % 1.0;
+
+    // 2. Horizontal Laser Oscillation
+    this.laserAngle += dt * 1.8;
+    this.laserY = this.cy + Math.sin(this.laserAngle) * 22;
+
+    // 3. Very subtle golden lightning (Occasional micro-arc every 35-60 frames)
+    this.lightningTimer++;
+    if (this.lightningTimer > 36 && Math.random() < 0.08) {
+      this.spawnLightningArc();
+      this.lightningTimer = 0;
+    }
+
+    // Update lightning arcs (short duration 3-4 frames)
+    for (let i = this.lightningArcs.length - 1; i >= 0; i--) {
+      const arc = this.lightningArcs[i];
+      arc.life -= dt * 9;
+      if (arc.life <= 0) this.lightningArcs.splice(i, 1);
+    }
+
+    // 4. Update golden sparks
+    for (let i = this.sparks.length - 1; i >= 0; i--) {
+      const p = this.sparks[i];
+      p.x += p.vx;
+      p.y += p.vy;
+      p.vy += 0.04;
+      p.alpha -= dt * 2.2;
+      if (p.alpha <= 0) this.sparks.splice(i, 1);
+    }
+
+    // 5. Ambient embers
+    for (const e of this.ambientEmbers) {
+      e.x += e.vx;
+      e.y += e.vy;
+      if (e.y < this.cy - 250) {
+        e.y = this.cy + 240;
+        e.x = this.cx + (Math.random() - 0.5) * 400;
+      }
+    }
+  }
+
+  spawnLightningArc() {
+    const r1 = this.coreRadius + 30;
+    const r2 = this.coreRadius + 60;
+    const baseAngle = Math.random() * Math.PI * 2;
+    const arcSpan = 0.25 + Math.random() * 0.4;
+    const segments = 4;
+    const pts = [];
+
+    for (let i = 0; i <= segments; i++) {
+      const frac = i / segments;
+      const angle = baseAngle + frac * arcSpan;
+      const radius = r1 + frac * (r2 - r1) + (Math.random() - 0.5) * 12;
+      pts.push({
+        x: this.cx + Math.cos(angle) * radius,
+        y: this.cy + Math.sin(angle) * radius
+      });
+    }
+
+    this.lightningArcs.push({ pts, life: 1.0 });
+  }
+
+  spawnCharSpark(x, y) {
+    if (this.sparks.length > 30) return;
+    for (let i = 0; i < 2; i++) {
+      const angle = Math.random() * Math.PI * 2;
+      const speed = 0.8 + Math.random() * 1.8;
+      this.sparks.push({
+        x,
+        y,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed - 0.5,
+        alpha: 0.95,
+        size: 1 + Math.random() * 1.5,
+        color: Math.random() > 0.4 ? '#ffd54f' : '#fff9c4'
+      });
+    }
+  }
+
+  draw() {
+    const ctx = this.ctx;
+    ctx.clearRect(0, 0, this.width, this.height);
+
+    // 1. Draw ambient embers in deep background
+    this.drawEmbers(ctx);
+
+    // 2. Pre-calculate all character positions in 3D orbit
+    const N = this.chars.length;
+    const spacing = 1.0 / Math.max(N, 16);
+    const charList = [];
+
+    for (let k = 0; k < N; k++) {
+      const u = (this.streamProgress + k * spacing) % 1.0;
+      const theta = u * Math.PI * 2;
+
+      // 3D coordinates on inclined ellipse
+      const x0 = this.orbitRadius * Math.cos(theta);
+      const y0 = this.orbitRadius * 0.40 * Math.sin(theta);
+      const z0 = this.orbitRadius * Math.sin(theta);
+
+      // Apply inclination tilt alpha
+      const cosA = Math.cos(this.orbitTilt);
+      const sinA = Math.sin(this.orbitTilt);
+      const x = this.cx + (x0 * cosA - y0 * sinA);
+      const y = this.cy + (x0 * sinA + y0 * cosA);
+
+      charList.push({
+        char: this.chars[k],
+        x,
+        y,
+        z0,
+        idx: k
+      });
+    }
+
+    // 3. Draw Back Characters (z0 < 0, behind the orb core)
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+
+    for (const c of charList) {
+      if (c.z0 < 0) {
+        const depthFrac = (c.z0 + this.orbitRadius) / this.orbitRadius;
+        const alpha = 0.25 + depthFrac * 0.25;
+        ctx.font = '600 13px ui-monospace, SFMono-Regular, "JetBrains Mono", Courier, monospace';
+        ctx.fillStyle = 'rgba(255, 60, 75, ' + alpha.toFixed(2) + ')';
+        ctx.shadowBlur = 4;
+        ctx.shadowColor = 'rgba(255, 42, 59, 0.4)';
+        ctx.fillText(c.char, c.x, c.y);
+      }
+    }
+
+    // 4. Draw 3D Spherical Scanning Core
+    this.drawSphereCore(ctx);
+
+    // 5. Draw Front Characters (z0 >= 0, passing through front of the orb)
+    for (const c of charList) {
+      if (c.z0 >= 0) {
+        const depthFrac = c.z0 / this.orbitRadius;
+        const dy = Math.abs(c.y - this.laserY);
+        const dx = Math.abs(c.x - this.cx);
+
+        // ILLUMINATION LOGIC: character intersects horizontal laser beam
+        if (dy < 24 && dx < this.coreRadius + 45) {
+          const prox = 1 - (dy / 24);
+          const scale = 1.0 + prox * 0.35;
+          const fontSize = Math.round(15 * scale);
+
+          ctx.font = '800 ' + fontSize + 'px ui-monospace, SFMono-Regular, "JetBrains Mono", Courier, monospace';
+
+          // Color shift to brilliant white-gold on beam intersection!
+          if (prox > 0.55) {
+            ctx.fillStyle = '#ffffff';
+            ctx.shadowColor = '#ffe082';
+            ctx.shadowBlur = 18 + prox * 10;
+            if (dy < 8 && Math.random() < 0.25) {
+              this.spawnCharSpark(c.x, c.y);
+            }
+          } else {
+            ctx.fillStyle = '#ffdede';
+            ctx.shadowColor = '#ffd54f';
+            ctx.shadowBlur = 12;
+          }
+
+          ctx.fillText(c.char, c.x, c.y);
+        } else {
+          // Standard front glowing character
+          const fontSize = Math.round(14 + depthFrac * 2);
+          ctx.font = '700 ' + fontSize + 'px ui-monospace, SFMono-Regular, "JetBrains Mono", Courier, monospace';
+          ctx.fillStyle = '#ff5765';
+          ctx.shadowColor = '#ff2a3b';
+          ctx.shadowBlur = 8 + depthFrac * 6;
+          ctx.fillText(c.char, c.x, c.y);
+        }
+      }
+    }
+
+    // 6. Draw Continuous Horizontal Red Energy Beam across the orb
+    this.drawHorizontalBeam(ctx);
+
+    // 7. Draw Subtle Golden Lightning Arcs
+    this.drawLightning(ctx);
+
+    // 8. Draw Golden Sparks
+    this.drawSparks(ctx);
+  }
+
+  drawSphereCore(ctx) {
+    const cx = this.cx;
+    const cy = this.cy;
+    const R = this.coreRadius;
+
+    ctx.save();
+
+    // Spherical clipping path
+    ctx.beginPath();
+    ctx.arc(cx, cy, R, 0, Math.PI * 2);
+
+    // 3D Shaded Sphere Fill
+    const grad = ctx.createRadialGradient(cx - 30, cy - 35, 15, cx, cy, R);
+    grad.addColorStop(0, '#1a2027');
+    grad.addColorStop(0.5, '#0b0e12');
+    grad.addColorStop(0.85, '#040507');
+    grad.addColorStop(1, '#ff1a2e'); // Red Fresnel rim glow
+    ctx.fillStyle = grad;
+    ctx.shadowColor = 'rgba(255, 42, 59, 0.85)';
+    ctx.shadowBlur = 35;
+    ctx.fill();
+
+    // Procedural Tech Latitude Lines on Sphere Surface
+    ctx.clip();
+    ctx.shadowBlur = 0;
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = 'rgba(255, 42, 59, 0.12)';
+
+    for (let lat = -60; lat <= 60; lat += 24) {
+      const yLat = cy + (lat / 90) * R;
+      const wLat = Math.sqrt(Math.max(0, R * R - (yLat - cy) * (yLat - cy)));
+      ctx.beginPath();
+      ctx.ellipse(cx, yLat, wLat, wLat * 0.22, 0, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+
+    // Inner Rim Shadow/Vignette
+    const innerRim = ctx.createRadialGradient(cx, cy, R * 0.72, cx, cy, R);
+    innerRim.addColorStop(0, 'rgba(0,0,0,0)');
+    innerRim.addColorStop(0.9, 'rgba(0,0,0,0.6)');
+    innerRim.addColorStop(1, 'rgba(255, 30, 45, 0.65)');
+    ctx.fillStyle = innerRim;
+    ctx.fill();
+
+    ctx.restore();
+  }
+
+  drawHorizontalBeam(ctx) {
+    const cx = this.cx;
+    const y = this.laserY;
+    const halfW = this.coreRadius + 60;
+
+    ctx.save();
+
+    // 1. Outer Crimson Beam Bloom
+    ctx.beginPath();
+    ctx.moveTo(cx - halfW, y);
+    ctx.lineTo(cx + halfW, y);
+    ctx.strokeStyle = '#ff2a3b';
+    ctx.lineWidth = 4;
+    ctx.shadowColor = '#ff1744';
+    ctx.shadowBlur = 24;
+    ctx.stroke();
+
+    // 2. Inner White-Hot Laser Core
+    ctx.beginPath();
+    ctx.moveTo(cx - halfW + 20, y);
+    ctx.lineTo(cx + halfW - 20, y);
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 1.8;
+    ctx.shadowColor = '#ffffff';
+    ctx.shadowBlur = 8;
+    ctx.stroke();
+
+    // 3. Curved Reflection on the 3D Sphere Core
+    const dy = y - this.cy;
+    if (Math.abs(dy) < this.coreRadius) {
+      const refW = Math.sqrt(Math.max(0, this.coreRadius * this.coreRadius - dy * dy));
+      ctx.beginPath();
+      ctx.ellipse(cx, y, refW * 0.92, 4, 0, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.45)';
+      ctx.shadowColor = '#ff2a3b';
+      ctx.shadowBlur = 15;
+      ctx.fill();
+    }
+
+    ctx.restore();
+  }
+
+  drawLightning(ctx) {
+    if (!this.lightningArcs.length) return;
+
+    ctx.save();
+    for (const arc of this.lightningArcs) {
+      if (arc.pts.length < 2) continue;
+      ctx.beginPath();
+      ctx.moveTo(arc.pts[0].x, arc.pts[0].y);
+      for (let i = 1; i < arc.pts.length; i++) {
+        ctx.lineTo(arc.pts[i].x, arc.pts[i].y);
+      }
+      ctx.strokeStyle = 'rgba(255, 215, 64, ' + (arc.life * 0.85).toFixed(2) + ')';
+      ctx.lineWidth = 1.5;
+      ctx.shadowColor = '#ffd54f';
+      ctx.shadowBlur = 8;
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  drawSparks(ctx) {
+    if (!this.sparks.length) return;
+    ctx.save();
+    for (const p of this.sparks) {
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+      ctx.fillStyle = p.color;
+      ctx.globalAlpha = Math.max(0, p.alpha);
+      ctx.shadowColor = p.color;
+      ctx.shadowBlur = 6;
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  drawEmbers(ctx) {
+    ctx.save();
+    for (const e of this.ambientEmbers) {
+      ctx.beginPath();
+      ctx.arc(e.x, e.y, e.size, 0, Math.PI * 2);
+      ctx.fillStyle = e.color;
+      ctx.globalAlpha = e.alpha;
+      ctx.shadowColor = e.color;
+      ctx.shadowBlur = 4;
+      ctx.fill();
+    }
+    ctx.restore();
+  }
 }
+
+/**
+ * Four-Stage Investigation Progress Controller
+ * Handles live progression across:
+ * 1. Analyzing Structure
+ * 2. Checking Threat Databases (honest check: configured vs standalone)
+ * 3. Evaluating Risk Factors
+ * 4. Generating Report
+ */
+class TimelineStageController {
+  constructor() {
+    this.fill = $('#timeline-progress-fill');
+    this.nodes = [
+      $('#stage-node-1'),
+      $('#stage-node-2'),
+      $('#stage-node-3'),
+      $('#stage-node-4')
+    ];
+    this.statuses = [
+      $('#stage-status-1'),
+      $('#stage-status-2'),
+      $('#stage-status-3'),
+      $('#stage-status-4')
+    ];
+    this.reset();
+  }
+
+  reset() {
+    if (this.fill) this.fill.style.width = '0%';
+    this.nodes.forEach((node, idx) => {
+      if (node) {
+        node.classList.remove('active', 'completed', 'standalone');
+      }
+      if (this.statuses[idx]) {
+        this.statuses[idx].textContent = 'PENDING';
+      }
+    });
+  }
+
+  setStage(stageNum, statusText, isActive = true) {
+    const idx = stageNum - 1;
+    if (idx < 0 || idx >= this.nodes.length) return;
+
+    // Previous stages are marked completed
+    for (let i = 0; i < idx; i++) {
+      if (this.nodes[i]) {
+        this.nodes[i].classList.remove('active');
+        this.nodes[i].classList.add('completed');
+      }
+      if (this.statuses[i] && this.statuses[i].textContent !== 'CHECKED' && this.statuses[i].textContent !== 'STANDALONE (LOCAL)') {
+        this.statuses[i].textContent = 'VERIFIED';
+      }
+    }
+
+    // Current stage
+    const currNode = this.nodes[idx];
+    if (currNode) {
+      currNode.classList.toggle('active', isActive);
+      if (!isActive) currNode.classList.add('completed');
+    }
+    if (this.statuses[idx] && statusText) {
+      this.statuses[idx].textContent = statusText;
+    }
+
+    // Update progress line fill percentage
+    const targetWidth = (stageNum / 4) * 100;
+    if (this.fill) {
+      this.fill.style.width = targetWidth + '%';
+    }
+  }
+
+  markStage2Reputation(isConfigured, isOnline) {
+    const node2 = this.nodes[1];
+    const status2 = this.statuses[1];
+    if (!node2 || !status2) return;
+
+    if (isConfigured && isOnline) {
+      node2.classList.remove('standalone');
+      node2.classList.add('completed');
+      status2.textContent = 'CHECKED (URLHAUS)';
+    } else {
+      node2.classList.add('standalone', 'completed');
+      status2.textContent = 'STANDALONE (LOCAL)';
+    }
+  }
+
+  completeAll() {
+    this.nodes.forEach(n => {
+      if (n) {
+        n.classList.remove('active');
+        n.classList.add('completed');
+      }
+    });
+    this.statuses.forEach((s) => {
+      if (s && s.textContent === 'PENDING') s.textContent = 'COMPLETE';
+    });
+    if (this.fill) this.fill.style.width = '100%';
+  }
+}
+
 
 function copyToClipboard(text, msg = 'Copied to clipboard!') {
   navigator.clipboard.writeText(text).then(() => {
@@ -577,6 +1050,9 @@ function renderResult(data) {
   $('#result').classList.remove('hidden');
 }
 
+let activeScanEngine = null;
+let activeTimelineController = null;
+
 async function scan() {
   const input = $('#url-input');
   const raw = input.value.trim();
@@ -586,26 +1062,72 @@ async function scan() {
     return;
   }
 
+  // 1. Clean up any previous active scanning engine instance
+  if (activeScanEngine) {
+    activeScanEngine.stop();
+    activeScanEngine = null;
+  }
+
   $('#scan-btn').disabled = true;
   $('#scan-btn').textContent = 'ANALYZING…';
   $('#result').classList.add('hidden');
   $('#scan-stage').classList.remove('hidden');
-  $('#scan-target').textContent = raw;
 
-  const stopProgress = stageProgress();
+  // Set target URL displays
+  const targetLabel = $('#scan-target');
+  if (targetLabel) targetLabel.textContent = raw;
+
+  // Initialize Canvas & Timeline Controllers
+  const canvas = $('#scan-orb-canvas');
+  if (canvas) {
+    activeScanEngine = new OrbScanEngine(canvas, raw);
+    activeScanEngine.start();
+  }
+
+  activeTimelineController = new TimelineStageController();
+  activeTimelineController.setStage(1, 'PARSING STRUCTURE');
+
+  const MIN_SCAN_DURATION = 4000; // at least 4.0 seconds duration
+  const startTime = Date.now();
+
+  // Progress pacing interval while scanning is in progress
+  const stageInterval = setInterval(() => {
+    const elapsed = Date.now() - startTime;
+    if (elapsed < 1200) {
+      activeTimelineController.setStage(1, 'PARSING STRUCTURE');
+    } else if (elapsed < 2400) {
+      activeTimelineController.setStage(2, 'QUERYING FEEDS');
+    } else if (elapsed < 3400) {
+      activeTimelineController.setStage(3, 'SCORING RISKS');
+    } else {
+      activeTimelineController.setStage(4, 'COMPILING REPORT');
+    }
+  }, 250);
 
   try {
-    const data = await requestScan(raw);
+    // RUN IN PARALLEL: Actual backend/client scan AND minimum 4s timer
+    const [data] = await Promise.all([
+      requestScan(raw),
+      new Promise(resolve => setTimeout(resolve, MIN_SCAN_DURATION))
+    ]);
 
-    // Stop laser progress animation immediately when response arrives
-    stopProgress();
-    $('#progress-fill').style.width = '100%';
-    $$('.progress-steps .step').forEach(s => s.classList.add('active'));
-    $('#scan-stage-title').textContent = 'ANALYSIS COMPLETE';
-    $('#scan-stage-sub').textContent = 'Evidence compiled. Transferring telemetry to investigation console…';
+    clearInterval(stageInterval);
 
-    // Brief pause to allow laser sweep to conclude gracefully
-    await new Promise(r => setTimeout(r, 260));
+    // Apply honest reputation status to Stage 2
+    const urlhausChecked = data.sources && data.sources.some(s => s.source && s.source.includes('URLhaus') && s.status === 'checked');
+    activeTimelineController.markStage2Reputation(urlhausChecked, true);
+    activeTimelineController.setStage(4, 'REPORT READY', false);
+    activeTimelineController.completeAll();
+
+    // Brief graceful completion pause (~350ms) to admire complete timeline
+    await new Promise(r => setTimeout(r, 350));
+
+    // Stop canvas animation cleanly
+    if (activeScanEngine) {
+      activeScanEngine.stop();
+      activeScanEngine = null;
+    }
+
     $('#scan-stage').classList.add('hidden');
 
     renderResult(data);
@@ -614,12 +1136,16 @@ async function scan() {
     saveRecords();
     updateOverview();
 
-    // Automatic smooth scroll to the results section
+    // Smooth scroll to the results section
     scrollToResult();
 
-    toast(`Analysis complete: ${data.verdict}`, 'success', 'VIEW RESULTS', () => scrollToResult());
+    toast('Analysis complete: ' + data.verdict, 'success', 'VIEW RESULTS', () => scrollToResult());
   } catch (error) {
-    stopProgress();
+    clearInterval(stageInterval);
+    if (activeScanEngine) {
+      activeScanEngine.stop();
+      activeScanEngine = null;
+    }
     $('#scan-stage').classList.add('hidden');
     toast(error.message || 'Unable to complete scan.', 'danger');
   } finally {
