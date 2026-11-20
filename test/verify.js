@@ -160,6 +160,23 @@ async function runTests() {
     {
       url: 'https://docs.api.small-saas-tool.dev/v1/endpoints/get-user-profile?fields=id,name,email',
       label: 'Developer Documentation on Multi-Level Domain with Deep Path'
+    },
+    // Negative test cases: non-impersonating words containing brand substrings must NOT be flagged
+    {
+      url: 'https://amazonia-expeditions.org/tour-packages?season=summer',
+      label: 'Legitimate Amazonia Travel Site (contains "amazonia", non-impersonating)'
+    },
+    {
+      url: 'https://appleton-bakery.com/our-menu?view=all',
+      label: 'Legitimate Appleton Bakery (contains "appleton", non-impersonating)'
+    },
+    {
+      url: 'https://panasonic-parts-direct.com/catalog?category=tv',
+      label: 'Independent Panasonic Parts Site (non-impersonating)'
+    },
+    {
+      url: 'https://microsystems-cloud-consulting.net/services',
+      label: 'Independent Microsystems Consulting (non-impersonating)'
     }
   ];
 
@@ -350,6 +367,55 @@ async function runTests() {
   if (credsScan.data.verdict === 'SUSPICIOUS') threatsDetected++;
   assert(credsScan.data.verdict === 'SUSPICIOUS', 'Embedded credentials flagged as SUSPICIOUS');
   assert(credsScan.data.findings.some(f => f.title.toLowerCase().includes('credentials')), 'Flags embedded credentials');
+
+  // K. REGRESSION TEST: User Reported Deceptive URL (signin-amaz0n-support.com)
+  totalThreatsTested++;
+  const userReportedUrl = await simulate(app, {
+    method: 'POST',
+    url: '/api/scan',
+    body: { url: 'https://signin-amaz0n-support.com/session/a8f31c9d?client=web&ref=account' },
+    ip: '10.2.1.11'
+  });
+  if (userReportedUrl.data.verdict === 'SUSPICIOUS') threatsDetected++;
+  assert(userReportedUrl.data.verdict === 'SUSPICIOUS', 'signin-amaz0n-support.com flagged as SUSPICIOUS');
+  assert(userReportedUrl.data.findings.some(f => f.title.includes('Brand Impersonation') || f.title.includes('Character Substitution') || f.title.includes('Combosquatting')), 'Flags Character Substitution / Brand Impersonation for signin-amaz0n-support.com');
+  assert(userReportedUrl.data.score >= 35, 'signin-amaz0n-support.com score is >= 35');
+
+  // L. Homoglyph brand + lure (amaz0n-support.com)
+  totalThreatsTested++;
+  const amaz0nSupport = await simulate(app, {
+    method: 'POST',
+    url: '/api/scan',
+    body: { url: 'https://amaz0n-support.com/account/login' },
+    ip: '10.2.1.12'
+  });
+  if (amaz0nSupport.data.verdict === 'SUSPICIOUS') threatsDetected++;
+  assert(amaz0nSupport.data.verdict === 'SUSPICIOUS', 'amaz0n-support.com flagged as SUSPICIOUS');
+  assert(amaz0nSupport.data.findings.some(f => f.title.includes('Brand Impersonation') || f.title.includes('Character Substitution') || f.title.includes('Combosquatting')), 'Flags Brand Impersonation for amaz0n-support.com');
+
+  // M. Homoglyph brand in subdomain (signin-amaz0n.attacker-domain.org)
+  totalThreatsTested++;
+  const subAmaz0n = await simulate(app, {
+    method: 'POST',
+    url: '/api/scan',
+    body: { url: 'https://signin-amaz0n.attacker-infrastructure.org/session' },
+    ip: '10.2.1.13'
+  });
+  if (subAmaz0n.data.verdict === 'SUSPICIOUS') threatsDetected++;
+  assert(subAmaz0n.data.verdict === 'SUSPICIOUS', 'signin-amaz0n.attacker-infrastructure.org flagged as SUSPICIOUS');
+  assert(subAmaz0n.data.findings.some(f => f.title.includes('Misleading brand')), 'Flags Misleading brand in subdomain for signin-amaz0n');
+
+  // N. Homoglyph brand + lure in registered domain (verify-paypa1-account.net)
+  totalThreatsTested++;
+  const paypa1Lure = await simulate(app, {
+    method: 'POST',
+    url: '/api/scan',
+    body: { url: 'https://verify-paypa1-account.net/login' },
+    ip: '10.2.1.14'
+  });
+  if (paypa1Lure.data.verdict === 'SUSPICIOUS') threatsDetected++;
+  assert(paypa1Lure.data.verdict === 'SUSPICIOUS', 'verify-paypa1-account.net flagged as SUSPICIOUS');
+  assert(paypa1Lure.data.findings.some(f => f.title.includes('Brand Impersonation') || f.title.includes('Character Substitution') || f.title.includes('Combosquatting')), 'Flags Brand Impersonation for verify-paypa1-account.net');
 
   // ---------------------------------------------------------------------------
   // SUITE 6: SSRF DEFENSE & OBFUSCATED IP HOSTS

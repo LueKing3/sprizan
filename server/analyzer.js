@@ -96,20 +96,52 @@ export function isPrivateOrReservedIP(ip) {
 }
 
 /**
+ * Phishing and account lure keywords commonly paired with brands.
+ */
+const LURE_KEYWORDS = new Set([
+  'security', 'secure', 'update', 'login', 'signin', 'sign-in', 'verify', 'verification',
+  'account', 'support', 'service', 'services', 'portal', 'wallet', 'pay', 'payment',
+  'auth', 'authenticate', 'authentication', 'online', 'checkout', 'billing', 'session',
+  'help', 'helpdesk', 'recover', 'recovery', 'alert', 'notice', 'confirm', 'confirmation',
+  'customer', 'customercare', 'password', 'passcode', 'protect', 'protection', 'center'
+]);
+
+/**
+ * Normalize common homoglyphs, visual character substitutions, and leetspeak numbers.
+ */
+function normalizeHomoglyphs(str) {
+  if (!str) return '';
+  return str.toLowerCase()
+    .replace(/0/g, 'o')
+    .replace(/1/g, 'l')
+    .replace(/3/g, 'e')
+    .replace(/4/g, 'a')
+    .replace(/5/g, 's')
+    .replace(/8/g, 'b')
+    .replace(/@/g, 'a')
+    .replace(/\$/g, 's')
+    .replace(/vv/g, 'w')
+    .replace(/rn/g, 'm')
+    // Cyrillic / Greek visual homoglyphs
+    .replace(/[\u0430\u0410]/g, 'a')
+    .replace(/[\u0435\u0415]/g, 'e')
+    .replace(/[\u043E\u041E]/g, 'o')
+    .replace(/[\u0440\u0420]/g, 'p')
+    .replace(/[\u0441\u0421]/g, 'c')
+    .replace(/[\u0443\u0423]/g, 'y')
+    .replace(/[\u0445\u0425]/g, 'x')
+    .replace(/[\u0456\u0406]/g, 'i');
+}
+
+/**
  * Check registered domain against target brands for typosquatting, combosquatting,
  * and visual character substitutions.
  */
 function detectTyposquatting(registeredDomain) {
   const domainLabel = registeredDomain.split('.')[0].toLowerCase();
-
-  // Normalize leetspeak lookalikes
-  const normalizedLabel = domainLabel
-    .replace(/1/g, 'l')
-    .replace(/0/g, 'o')
-    .replace(/5/g, 's')
-    .replace(/3/g, 'e')
-    .replace(/vv/g, 'w')
-    .replace(/rn/g, 'm');
+  const normalizedLabel = normalizeHomoglyphs(domainLabel);
+  const rawTokens = domainLabel.split(/[-_.]+/).filter(Boolean);
+  const normTokens = normalizedLabel.split(/[-_.]+/).filter(Boolean);
 
   for (const [brandKey, meta] of Object.entries(TARGET_BRANDS)) {
     // If it is an authorized canonical domain for the brand, do not flag
@@ -119,28 +151,16 @@ function detectTyposquatting(registeredDomain) {
 
     const brandName = meta.name;
 
-    // 1. Combosquatting: brand hyphenated with lure keywords (e.g. amazon-security, login-paypal)
-    const brandHyphenRegex = new RegExp(`(^|-)${brandKey}-(security|update|login|verify|account|support|service|portal|wallet|pay|auth|online|signin|checkout)($|-)`, 'i');
-    const lureHyphenRegex = new RegExp(`^(security|update|login|verify|account|support|service|portal|wallet|pay|auth|online|signin|checkout)-${brandKey}($|-)`, 'i');
-
-    if (brandHyphenRegex.test(domainLabel) || lureHyphenRegex.test(domainLabel)) {
-      return {
-        type: 'Combosquatting / Hyphenated Brand Lure',
-        brand: brandName,
-        detail: `The registered domain "${registeredDomain}" pairs a popular brand name ("${brandName}") with an account/security lure keyword. Combosquatting is a known phishing tactic to deceive users.`
-      };
-    }
-
-    // 2. Character substitution / Leetspeak (e.g. paypa1.com, g00gle.com, rnicrosoft.com)
+    // 1. Direct character substitution on standalone label (e.g. amaz0n.com, paypa1.com, micros0ft.com)
     if (normalizedLabel === brandKey && domainLabel !== brandKey) {
       return {
         type: 'Character Substitution / Lookalike Domain',
         brand: brandName,
-        detail: `The registered domain "${registeredDomain}" substitutes characters (e.g. "1" for "l" or "0" for "o") to visually imitate brand "${brandName}".`
+        detail: `The registered domain "${registeredDomain}" substitutes characters (e.g. "0" for "o" or "1" for "l") to visually imitate brand "${brandName}".`
       };
     }
 
-    // 3. Typosquatting / Edit distance (e.g. amazn.in, goolge.com)
+    // 2. Direct typosquatting on standalone label (e.g. amazn.in, gogole.com, twiter.com)
     if (Math.abs(domainLabel.length - brandKey.length) <= 2) {
       const dist = damerauLevenshtein(domainLabel, brandKey);
       if (dist === 1 && domainLabel !== brandKey) {
@@ -149,6 +169,61 @@ function detectTyposquatting(registeredDomain) {
           brand: brandName,
           detail: `The registered domain "${registeredDomain}" varies by only 1 character from popular brand "${brandName}" (edit distance: 1). Typosquatting exploits typographical mistakes to hijack traffic.`
         };
+      }
+    }
+
+    // 3. Token-based combosquatting & character substitutions (e.g. signin-amaz0n-support, amazon-security-update, verify-paypa1)
+    let matchedToken = null;
+    let isSubstituted = false;
+
+    for (let i = 0; i < rawTokens.length; i++) {
+      const rt = rawTokens[i];
+      const nt = normTokens[i];
+
+      if (nt === brandKey) {
+        matchedToken = rt;
+        isSubstituted = rt !== brandKey;
+        break;
+      }
+      // Token typosquatting (e.g. signin-amazn-support)
+      if (Math.abs(nt.length - brandKey.length) <= 1 && damerauLevenshtein(nt, brandKey) === 1) {
+        matchedToken = rt;
+        isSubstituted = true;
+        break;
+      }
+    }
+
+    if (matchedToken) {
+      const normMatched = normalizeHomoglyphs(matchedToken);
+      const otherTokens = normTokens.filter(t => t !== brandKey && t !== normMatched);
+      const matchedLures = otherTokens.filter(t => LURE_KEYWORDS.has(t));
+      const hasLure = matchedLures.length > 0;
+
+      if (isSubstituted) {
+        return {
+          type: 'Character Substitution / Deceptive Brand Impersonation',
+          brand: brandName,
+          detail: `The registered domain "${registeredDomain}" contains lookalike brand token "${matchedToken}" (visually imitating "${brandName}" via character substitution)${hasLure ? ' paired with account lures (' + matchedLures.join(', ') + ')' : ''}.`
+        };
+      } else if (hasLure) {
+        return {
+          type: 'Combosquatting / Hyphenated Brand Lure',
+          brand: brandName,
+          detail: `The registered domain "${registeredDomain}" pairs brand name "${brandName}" with sensitive account/security lure keywords (${matchedLures.join(', ')}). Combosquatting is a known phishing tactic to deceive users.`
+        };
+      }
+    }
+
+    // 4. Fused lure + brand (e.g. amaz0nsupport.com, signinamazon.com, securepaypal.net)
+    if (normalizedLabel.includes(brandKey) && domainLabel !== brandKey) {
+      for (const lure of LURE_KEYWORDS) {
+        if (normalizedLabel.includes(brandKey + lure) || normalizedLabel.includes(lure + brandKey)) {
+          return {
+            type: 'Combosquatting / Brand Lure Keyword Combination',
+            brand: brandName,
+            detail: `The registered domain "${registeredDomain}" combines brand "${brandName}" with account lure keyword "${lure}".`
+          };
+        }
       }
     }
   }
@@ -397,13 +472,19 @@ export function inspectUrl(raw) {
         }
 
         const subString = subdomains.join('.');
+        const normalizedSub = normalizeHomoglyphs(subString);
         const brandRegex = new RegExp(`(^|[-._])${brandKey}([-._]|$)`, 'i');
-        if (brandRegex.test(subString) || brandRegex.test(host.replace(registeredDomain, ''))) {
+        if (
+          brandRegex.test(subString) ||
+          brandRegex.test(normalizedSub) ||
+          brandRegex.test(host.replace(registeredDomain, '')) ||
+          brandRegex.test(normalizeHomoglyphs(host.replace(registeredDomain, '')))
+        ) {
           detectedBrandSpoof = true;
           add(
             'high',
             `Misleading brand in subdomain (${meta.name.toUpperCase()})`,
-            `The URL displays brand keyword "${brandKey}" in its subdomain, but the actual registered destination is "${registeredDomain}". This is a primary indicator of brand impersonation phishing.`,
+            `The URL displays brand keyword "${brandKey}" (or homoglyph lookalike) in its subdomain, but the actual registered destination is "${registeredDomain}". This is a primary indicator of brand impersonation phishing.`,
             35,
             'domain'
           );

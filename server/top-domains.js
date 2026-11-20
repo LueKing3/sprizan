@@ -217,19 +217,19 @@ export const TOP_LEGITIMATE_DOMAINS = new Set(RAW_TOP_DOMAINS.map(d => d.toLower
 // 4. Target Brands for Brand Impersonation, Lookalike & Typosquatting Analysis
 export const TARGET_BRANDS = {
   amazon: {
-    canonical: ['amazon.com', 'amazon.in', 'amazon.co.uk', 'amazon.de', 'amazon.co.jp', 'amazon.fr', 'amazon.it', 'amazon.es', 'amazon.ca', 'amazon.com.au', 'primevideo.com', 'media-amazon.com'],
+    canonical: ['amazon.com', 'amazon.in', 'amazon.co.uk', 'amazon.de', 'amazon.co.jp', 'amazon.fr', 'amazon.it', 'amazon.es', 'amazon.ca', 'amazon.com.au', 'primevideo.com', 'media-amazon.com', 'amazonaws.com', 'cloudfront.net', 'a2z.com', 'amazonprime.com', 'audible.com', 'ssl-images-amazon.com'],
     name: 'Amazon'
   },
   google: {
-    canonical: ['google.com', 'google.co.in', 'google.co.uk', 'google.de', 'google.fr', 'google.co.jp', 'gmail.com', 'googleusercontent.com', 'gstatic.com', 'googlevideo.com', 'deepmind.google'],
+    canonical: ['google.com', 'google.co.in', 'google.co.uk', 'google.de', 'google.fr', 'google.co.jp', 'gmail.com', 'googleusercontent.com', 'gstatic.com', 'googlevideo.com', 'deepmind.google', 'googleapis.com', 'googlepay.com', 'withgoogle.com', 'googleblog.com'],
     name: 'Google'
   },
   microsoft: {
-    canonical: ['microsoft.com', 'live.com', 'office.com', 'bing.com', 'azure.com', 'outlook.com', 'windows.com', 'office365.com', 'sharepoint.com', 'onedrive.com'],
+    canonical: ['microsoft.com', 'live.com', 'office.com', 'bing.com', 'azure.com', 'outlook.com', 'windows.com', 'office365.com', 'sharepoint.com', 'onedrive.com', 'microsoftonline.com', 'microsoftstore.com', 'microsoftedge.com', 'visualstudio.com', 'xbox.com'],
     name: 'Microsoft'
   },
   apple: {
-    canonical: ['apple.com', 'icloud.com', 'applepay.com', 'itunes.com'],
+    canonical: ['apple.com', 'icloud.com', 'applepay.com', 'itunes.com', 'apple.news', 'cdn-apple.com', 'aaplimg.com', 'mzstatic.com'],
     name: 'Apple'
   },
   paypal: {
