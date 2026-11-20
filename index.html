@@ -173,11 +173,22 @@
         <!-- Cinematic Cyber Threat Scanning Orb & Dragon Chamber (Reference UI) -->
         <div class="scan-stage hidden" id="scan-stage" aria-live="assertive">
           <div class="scan-theater">
-            <!-- Unobtrusive Target Ingestion Telemetry Readout (Leaves Orb Clear) -->
-            <div class="scan-target-badge" id="scan-target-badge" title="Target Payload Stream">
-              <span class="target-badge-beacon"></span>
-              <span class="target-badge-label">TARGET INGESTION:</span>
-              <span class="target-badge-url mono" id="scan-target">AWAITING TARGET URL</span>
+            <!-- Top HUD Bar: Target Streaming Readout & Sound Control -->
+            <div class="scan-hud-header">
+              <div class="scan-target-badge" id="scan-target-badge" title="Character Ingestion Stream into Central Orb">
+                <span class="target-badge-beacon"></span>
+                <span class="target-badge-label">STREAMING CHARACTERS:</span>
+                <span class="target-badge-url mono" id="scan-target">AWAITING TARGET</span>
+              </div>
+              <div class="scan-audio-controls" id="scan-audio-controls">
+                <button type="button" class="audio-toggle-btn" id="audio-toggle-btn" aria-label="Toggle scanner sound effects">
+                  <span class="audio-toggle-icon" id="audio-toggle-icon">🔇</span>
+                  <span class="audio-toggle-text" id="audio-toggle-text">SOUND: OFF</span>
+                </button>
+                <div class="audio-slider-wrap" title="Scanner Audio Volume">
+                  <input type="range" class="audio-slider" id="audio-volume-slider" min="0" max="1" step="0.05" value="0.5" />
+                </div>
+              </div>
             </div>
 
             <!-- Background Dragon Silhouette & Ambient Crimson Atmosphere -->

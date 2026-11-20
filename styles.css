@@ -856,22 +856,29 @@ body {
   overflow: hidden;
 }
 
-/* Telemetry Target Ingestion Readout (Unobtrusive Header Chip) */
-.scan-target-badge {
+/* Top HUD Bar: Target Streaming Readout & Audio Controls */
+.scan-hud-header {
   position: absolute;
   top: 14px;
-  left: 50%;
-  transform: translateX(-50%);
+  left: 16px;
+  right: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  z-index: 15;
+}
+
+.scan-target-badge {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 5px 16px;
-  background: rgba(9, 13, 17, 0.85);
+  padding: 5px 14px;
+  background: rgba(9, 13, 17, 0.88);
   border: 1px solid rgba(255, 42, 59, 0.35);
   border-radius: 20px;
   backdrop-filter: blur(8px);
   box-shadow: 0 4px 18px rgba(0, 0, 0, 0.75), 0 0 15px rgba(255, 42, 59, 0.18);
-  z-index: 12;
   pointer-events: none;
 }
 
@@ -891,7 +898,7 @@ body {
 }
 
 .target-badge-url {
-  max-width: min(380px, 60vw);
+  max-width: min(340px, 45vw);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -899,6 +906,84 @@ body {
   color: #ffffff;
   text-shadow: 0 0 10px rgba(255, 42, 59, 0.75);
   letter-spacing: 0.5px;
+}
+
+/* Sound & Audio Controls in HUD */
+.scan-audio-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 12px;
+  background: rgba(9, 13, 17, 0.88);
+  border: 1px solid rgba(255, 42, 59, 0.35);
+  border-radius: 20px;
+  backdrop-filter: blur(8px);
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.75);
+}
+
+.audio-toggle-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: none;
+  border: none;
+  color: #8fa0a8;
+  font: 700 10px var(--mono);
+  letter-spacing: 0.8px;
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: 6px;
+  transition: all 0.2s ease;
+}
+
+.audio-toggle-btn:hover {
+  color: #ffffff;
+}
+
+.audio-toggle-btn.active {
+  color: #ff2a3b;
+  text-shadow: 0 0 8px rgba(255, 42, 59, 0.8);
+}
+
+.audio-toggle-icon {
+  font-size: 13px;
+  line-height: 1;
+}
+
+.audio-slider-wrap {
+  display: flex;
+  align-items: center;
+}
+
+.audio-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 55px;
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.2);
+  outline: none;
+  cursor: pointer;
+}
+
+.audio-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #ff2a3b;
+  box-shadow: 0 0 8px #ff2a3b;
+  cursor: pointer;
+}
+
+.audio-slider::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #ff2a3b;
+  box-shadow: 0 0 8px #ff2a3b;
+  cursor: pointer;
 }
 
 /* Background Dragon Backdrop */
@@ -1056,9 +1141,13 @@ body {
 /* Interactive Canvas for 3D Core, Character Stream, Laser & Lightning */
 #scan-orb-canvas {
   position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
+  width: 520px;
+  height: 520px;
+  max-width: 96vw;
+  max-height: 96vw;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
   z-index: 6;
   pointer-events: none;
 }
@@ -2234,6 +2323,13 @@ footer b {
   }
 
   /* Responsive Scanning Theater (Mobile) */
+  .scan-hud-header {
+    position: static;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+
   .scan-orb-wrapper {
     width: 290px;
     height: 290px;
