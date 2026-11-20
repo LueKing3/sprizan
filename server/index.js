@@ -217,7 +217,9 @@ app.post('/api/scan', rateLimiter, async (req, res) => {
       const reasons = highFindings.length > 0
         ? highFindings.map(f => f.title).join(', ')
         : `${local.findings.length} warning indicators detected`;
-      verdictDetail = `Local analysis identified meaningful risk indicators: ${reasons}. Review individual evidence items below.`;
+      verdictDetail = local.isInternalIP
+        ? `The target resolves to internal, private, or loopback network infrastructure (${local.host}). Flagged as a security restriction (OWASP SSRF protection) rather than fraudulent external web content.`
+        : `Local analysis identified meaningful risk indicators: ${reasons}. Review individual evidence items below.`;
       score = Math.max(score, local.hasHighSeverity ? 50 : 35);
     } else if (urlhausResult.status === 'checked') {
       // Category C1: NO THREAT INDICATORS DETECTED (external threat intel verified clean)

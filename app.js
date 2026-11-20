@@ -1804,7 +1804,7 @@ function isRecognizedTopDomain(registeredDomain) {
 }
 
 
-import { URL } from 'node:url';
+
 
 
 
@@ -2090,7 +2090,7 @@ function inspectUrl(raw) {
       add(
         'high',
         `Internal / ${reserved.type} IP address (SSRF Risk)`,
-        `The URL targets a private, internal, or loopback network address (${reserved.range}). Legitimate public internet links do not target internal host infrastructure.`,
+        `The URL targets a non-routable private, internal, or loopback network address (${reserved.range}). This represents an internal network security / SSRF boundary, not evidence of fraudulent intent on the public web.`,
         35,
         'domain'
       );
@@ -2105,13 +2105,30 @@ function inspectUrl(raw) {
     }
   }
 
+  // Dynamic DNS wildcards pointing to private IP (e.g. 127.0.0.1.nip.io, 192-168-1-1.sslip.io)
+  const dynDnsMatch = host.match(/^(?:.*[.-])?(\d{1,3}[.-]\d{1,3}[.-]\d{1,3}[.-]\d{1,3})\.(?:nip\.io|sslip\.io)$/i);
+  if (dynDnsMatch) {
+    const candidateIp = dynDnsMatch[1].replace(/-/g, '.');
+    const reserved = isPrivateOrReservedIP(candidateIp);
+    if (reserved) {
+      isInternalIP = true;
+      add(
+        'high',
+        `Dynamic DNS resolving to ${reserved.type} address (SSRF Risk)`,
+        `The hostname uses a dynamic wildcard service pointing to an internal network address (${candidateIp}). This represents an SSRF boundary, not a public internet service.`,
+        35,
+        'domain'
+      );
+    }
+  }
+
   // Localhost keyword check
   if (host === 'localhost' || host.endsWith('.localhost')) {
     isInternalIP = true;
     add(
       'high',
       'Internal / Localhost destination targeted (SSRF Risk)',
-      'The URL targets the local loopback host (localhost). Legitimate public internet links do not target localhost.',
+      'The URL targets the local loopback host (localhost). This represents an internal infrastructure restriction (SSRF boundary), not a public internet service.',
       35,
       'domain'
     );
@@ -2251,7 +2268,7 @@ function inspectUrl(raw) {
               add(
                 'high',
                 `Potential open redirect parameter ("${param}")`,
-                `The query parameter "${param}" points to an external destination ("${val.slice(0, 50)}..."). Open redirects are exploited in phishing to route victims from trusted links to unvetted external sites.`,
+                `The query parameter "${param}" references an external destination ("${val.slice(0, 50)}..."). Note: Static URL inspection identifies this external redirection pattern, but cannot prove vulnerability without active server validation. Unvalidated open redirects are commonly exploited in phishing to disguise destination endpoints.`,
                 25,
                 'content'
               );
@@ -2356,7 +2373,9 @@ function runClientSideInspection(raw) {
     const reasons = highFindings.length > 0
       ? highFindings.map(f => f.title).join(', ')
       : `${local.findings.length} warning indicators detected`;
-    verdictDetail = `Local analysis identified meaningful risk indicators: ${reasons}. Review individual evidence items below.`;
+    verdictDetail = local.isInternalIP
+      ? `The target resolves to internal, private, or loopback network infrastructure (${local.host}). Flagged as a security restriction (OWASP SSRF protection) rather than fraudulent external web content.`
+      : `Local analysis identified meaningful risk indicators: ${reasons}. Review individual evidence items below.`;
     score = Math.max(score, local.hasHighSeverity ? 50 : 35);
   } else {
     verdict = 'NO SUSPICIOUS INDICATORS FOUND — LOCAL ANALYSIS ONLY';
