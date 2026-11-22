@@ -522,9 +522,12 @@ class OrbScanEngine {
 
   initHorizontalStream() {
     this.characters = [];
-    // Populate horizontal line from left edge so stream is immediately active
-    let curX = 30;
-    while (curX < this.width + 40) {
+    this.streamCursor = 0;
+    // Position lead character approaching from left scanning boundary (~100px)
+    // and queue subsequent characters to its left so the entire URL streams
+    // sequentially through the orb as the user arrives at the scanning chamber.
+    let curX = 100;
+    while (curX > -this.charSpacing * 3) {
       const char = this.fullStreamChars[this.streamCursor];
       this.streamCursor = (this.streamCursor + 1) % this.fullStreamChars.length;
       this.characters.push({
@@ -536,7 +539,7 @@ class OrbScanEngine {
         scale: 1.0,
         magFactor: 0
       });
-      curX += this.charSpacing;
+      curX -= this.charSpacing;
     }
   }
 
@@ -1454,44 +1457,59 @@ function validateTargetUrlInput(raw) {
 }
 
 /**
- * Automatically and smoothly scrolls the viewport directly to the scanning orb chamber.
- * Centers the orb on desktop, clears sticky header on mobile, avoids abrupt jumps,
- * and respects prefers-reduced-motion.
+ * Automatically and smoothly scrolls the viewport directly to the central scanning orb container (.scan-orb-wrapper).
+ * Handles nested scrolling containers, respects prefers-reduced-motion, and ensures the orb is centered without manual scrolling.
  */
-function scrollToScanningOrb() {
-  const stage = $('#scan-stage');
-  if (!stage) return;
+function navigateToScanningOrb() {
+  const orb = document.querySelector('.scan-orb-wrapper') || document.getElementById('scan-orb-canvas') || document.getElementById('scan-stage');
+  if (!orb) return;
 
   const prefersReducedMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   const behavior = prefersReducedMotion ? 'auto' : 'smooth';
 
+  // 1. Native W3C scrollIntoView on the actual scanning orb container (handles any nested scroll containers)
+  try {
+    orb.scrollIntoView({
+      behavior,
+      block: 'center',
+      inline: 'center'
+    });
+  } catch (e) {
+    orb.scrollIntoView(true);
+  }
+
+  // 2. Coordinate window and document scrollingElement for precision vertical centering below sticky header
   requestAnimationFrame(() => {
     requestAnimationFrame(() => {
-      // Accurately determine sticky navigation offset (mobile sidebar vs desktop topbar)
       const isMobile = window.innerWidth <= 768;
-      const stickyHeader = isMobile ? $('.sidebar') : ($('.topbar') || $('header'));
+      const stickyHeader = isMobile ? document.querySelector('.sidebar') : (document.querySelector('.topbar') || document.querySelector('header'));
       const headerHeight = stickyHeader ? stickyHeader.getBoundingClientRect().height : 70;
-      const navOffset = Math.max(64, Math.round(headerHeight) + 12);
+      const navOffset = Math.max(60, Math.round(headerHeight) + 8);
 
-      const stageRect = stage.getBoundingClientRect();
-      const currentScrollY = window.pageYOffset || document.documentElement.scrollTop;
-      const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
+      const orbRect = orb.getBoundingClientRect();
+      const currentScrollY = window.pageYOffset || document.documentElement.scrollTop || document.body.scrollTop || 0;
+      const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 800;
 
-      // Position the scanning orb chamber comfortably in the user's field of view
-      let targetY;
-      if (stageRect.height < viewportHeight - navOffset) {
-        // Entire scanning stage fits in view: vertically center it within remaining viewport space
-        const verticalPadding = (viewportHeight - navOffset - stageRect.height) / 2;
-        targetY = currentScrollY + stageRect.top - navOffset - Math.max(0, verticalPadding);
-      } else {
-        // Taller than viewport (mobile): position top of stage just beneath sticky navigation
-        targetY = currentScrollY + stageRect.top - navOffset;
+      // Position orb visual center in middle of viewport area below sticky header
+      const availableHeight = viewportHeight - navOffset;
+      const orbCenterY = orbRect.top + (orbRect.height / 2);
+      const desiredCenterY = navOffset + (availableHeight / 2);
+      const deltaY = orbCenterY - desiredCenterY;
+
+      const finalTargetY = Math.max(0, Math.round(currentScrollY + deltaY));
+
+      const scroller = document.scrollingElement || document.documentElement || document.body;
+      if (Math.abs((window.pageYOffset || 0) - finalTargetY) > 8) {
+        window.scrollTo({
+          top: finalTargetY,
+          behavior
+        });
       }
-
-      window.scrollTo({
-        top: Math.max(0, Math.round(targetY)),
-        behavior
-      });
+      if (scroller && Math.abs(scroller.scrollTop - finalTargetY) > 8) {
+        try {
+          scroller.scrollTo({ top: finalTargetY, behavior });
+        } catch(e) {}
+      }
     });
   });
 }
@@ -1514,6 +1532,9 @@ async function scan() {
   }
 
   isScanning = true;
+  // Blur input immediately to dismiss mobile keyboards and prevent focus anchor from locking viewport
+  if (input) input.blur();
+
   const scanBtn = $('#scan-btn');
   if (scanBtn) {
     scanBtn.disabled = true;
@@ -1530,13 +1551,18 @@ async function scan() {
   const scanStage = $('#scan-stage');
   if (scanStage) {
     scanStage.classList.remove('hidden');
+    // Force layout reflow so the container has full DOM dimensions before scrolling
+    void scanStage.offsetHeight;
   }
 
   // Set target URL displays
   const targetLabel = $('#scan-target');
   if (targetLabel) targetLabel.textContent = validatedUrl;
 
-  // 3. Immediately start scanning animation & audio
+  // 3. Immediately smoothly navigate viewport to the central scanning orb
+  navigateToScanningOrb();
+
+  // 4. Start Canvas scanning engine & sound coordinated with camera arrival
   const canvas = $('#scan-orb-canvas');
   if (canvas) {
     globalAudioEngine.startScan();
@@ -1546,9 +1572,6 @@ async function scan() {
 
   activeTimelineController = new TimelineStageController();
   activeTimelineController.setStage(1, 'PARSING STRUCTURE');
-
-  // 4. Automatically and smoothly navigate to the scanning orb section
-  scrollToScanningOrb();
 
   const MIN_SCAN_DURATION = 4000; // at least 4.0 seconds duration
   const startTime = Date.now();
