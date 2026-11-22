@@ -1045,16 +1045,17 @@ class OrbScanEngine {
 }
 
 // ============================================================================
-// FLOWING CRIMSON FLAME-SMOKE ENGINE (INITIALISE SCANNER BUTTON)
-// Direct Recreation of Reference "Final Look (Subtle & Premium)"
+// SOFT WISPY CRIMSON SMOKE ENGINE (INITIALISE SCANNER HERO BUTTON)
+// Direct Recreation of Reference Image 2 ("Final Look: Subtle & Premium")
 // Features:
-// - Broad, smooth, organic, translucent crimson smoke formations emerging from
-//   behind the button's upper edge
-// - Cubic Bézier fluid plumes with deep crimson interiors and glowing scarlet edges
-// - Zero pixel noise, zero grain, zero wireframe spikes, zero fuzzy halos
-// - Hypnotic, slow-motion organic billowing and curling movement
-// - Compact, proportionate reach (35px-58px above button top), never touching text
-// - Smooth transitions between Idle, Hover, and Click states
+// - Soft, wispy, translucent, organic red smoke billowing BEHIND the button
+// - Billows laterally out to 1.6x-1.8x button width (configurable via --smoke-width)
+// - Gentle upward rise (height bounded to 42-56px), dissipating smoothly into black
+// - Never reaches or obscures paragraph text above
+// - Silky curling ribbons and volumetric puffs with zero wireframe strokes
+// - Pre-rendered soft Gaussian/cubic radial falloff sprites on offscreen canvases
+// - Additive screen blending producing luminous folding highlights on curls
+// - Full intersection observer, tab visibility, and prefers-reduced-motion support
 // ============================================================================
 
 class HeroSmokeEngine {
@@ -1062,41 +1063,100 @@ class HeroSmokeEngine {
     this.canvas = canvas;
     this.ctx = canvas.getContext('2d');
     this.button = button;
+    this.container = button.closest('.hero-btn-container, .scanner-cta') || button.parentElement;
     this.overviewView = document.getElementById('view-overview');
 
     this.time = 0;
     this.lastTimestamp = performance.now();
     this.running = false;
     this.animId = null;
+    this.isVisible = true;
 
     // Interaction states
-    this.intensity = 0.9;
-    this.targetIntensity = 0.9;
+    this.intensity = 1.0;
+    this.targetIntensity = 1.0;
     this.hover = 0.0;
     this.targetHover = 0.0;
     this.burst = 0.0;
     this.burstActive = false;
 
+    // Build soft radial sprites for rendering
+    this.initSprites();
     this.initDimensions();
     this.initPlumes();
+    this.initPuffs();
     this.initMotes();
     this.bindEvents();
-    this.start();
+    this.setupObserver();
+
+    // Check reduced motion
+    this.prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (this.prefersReducedMotion) {
+      this.drawStaticHaze();
+    } else {
+      this.start();
+    }
+  }
+
+  initSprites() {
+    // 1. spriteVeil: Deep translucent blood-red gradient for volumetric depth
+    this.spriteVeil = document.createElement('canvas');
+    this.spriteVeil.width = 128;
+    this.spriteVeil.height = 128;
+    const ctxV = this.spriteVeil.getContext('2d');
+    const radV = ctxV.createRadialGradient(64, 64, 0, 64, 64, 64);
+    radV.addColorStop(0.0, 'rgba(145, 12, 22, 0.40)');
+    radV.addColorStop(0.35, 'rgba(110, 8, 16, 0.28)');
+    radV.addColorStop(0.70, 'rgba(50, 3, 8, 0.10)');
+    radV.addColorStop(1.0, 'rgba(0, 0, 0, 0)');
+    ctxV.fillStyle = radV;
+    ctxV.fillRect(0, 0, 128, 128);
+
+    // 2. spriteRibbon: Glowing scarlet smoke gradient for fluid curling bodies
+    this.spriteRibbon = document.createElement('canvas');
+    this.spriteRibbon.width = 96;
+    this.spriteRibbon.height = 96;
+    const ctxR = this.spriteRibbon.getContext('2d');
+    const radR = ctxR.createRadialGradient(48, 48, 0, 48, 48, 48);
+    radR.addColorStop(0.0, 'rgba(225, 24, 38, 0.52)');
+    radR.addColorStop(0.35, 'rgba(175, 14, 25, 0.32)');
+    radR.addColorStop(0.70, 'rgba(85, 5, 12, 0.12)');
+    radR.addColorStop(1.0, 'rgba(0, 0, 0, 0)');
+    ctxR.fillStyle = radR;
+    ctxR.fillRect(0, 0, 96, 96);
+
+    // 3. spriteHighlight: Luminous coral-scarlet wisp highlight on curl folds
+    this.spriteHighlight = document.createElement('canvas');
+    this.spriteHighlight.width = 64;
+    this.spriteHighlight.height = 64;
+    const ctxH = this.spriteHighlight.getContext('2d');
+    const radH = ctxH.createRadialGradient(32, 32, 0, 32, 32, 32);
+    radH.addColorStop(0.0, 'rgba(255, 105, 120, 0.65)');
+    radH.addColorStop(0.35, 'rgba(255, 45, 65, 0.35)');
+    radH.addColorStop(0.75, 'rgba(180, 15, 25, 0.10)');
+    radH.addColorStop(1.0, 'rgba(0, 0, 0, 0)');
+    ctxH.fillStyle = radH;
+    ctxH.fillRect(0, 0, 64, 64);
   }
 
   initDimensions() {
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
     this.dpr = dpr;
 
-    const bw = this.button.offsetWidth || 220;
-    const bh = this.button.offsetHeight || 44;
+    const bw = this.button.offsetWidth || 230;
+    const bh = this.button.offsetHeight || 46;
 
-    // Compact, proportionate canvas padding
-    this.padX = 35;
-    this.padTop = 65; // Headroom for smoke formations to rise above button
-    this.padBottom = 12;
+    // Read CSS variables if set
+    let smokeWidthRatio = 1.7;
+    if (this.container) {
+      const val = parseFloat(getComputedStyle(this.container).getPropertyValue('--smoke-width'));
+      if (!isNaN(val) && val > 1) smokeWidthRatio = val;
+    }
 
-    this.width = bw + this.padX * 2;
+    this.width = Math.round(bw * smokeWidthRatio);
+    this.padX = Math.round((this.width - bw) / 2);
+    this.padTop = 60; // Headroom above button top edge
+    this.padBottom = 16;
     this.height = bh + this.padTop + this.padBottom;
 
     this.canvas.width = Math.round(this.width * dpr);
@@ -1110,85 +1170,144 @@ class HeroSmokeEngine {
     this.btnW = bw;
     this.btnH = bh;
     this.btnX = this.padX;
-    this.btnY = this.padTop; // Top edge of button inside canvas coordinate space
+    this.btnY = this.padTop;
   }
 
   initPlumes() {
-    // 6 distinct flowing smoke formations (matching bottom-right reference panel)
+    // 7 silky flowing plumes echoing the curling tendrils from Image 2
     this.plumes = [
-      // 1. Left corner curling plume (wraps around left curve)
+      // 1. Far left wing: curls outward to the left beyond button edge
       {
-        relX: 0.10,
+        relX: 0.05,
+        driftX: -42,
+        height: 46,
         baseW: 30,
-        height: 38,
         speed: 0.72,
         phase: 0.4,
-        curlDir: -1,
+        curlFreq: 3.2,
         isBack: false
       },
-      // 2. Left-center broad billowing plume
+      // 2. Left-center plume: curving upwards with graceful inward hook
       {
-        relX: 0.30,
-        baseW: 46,
-        height: 50,
+        relX: 0.22,
+        driftX: -16,
+        height: 52,
+        baseW: 36,
         speed: 0.85,
         phase: 1.8,
-        curlDir: 1,
+        curlFreq: 3.6,
         isBack: false
       },
-      // 3. Central tall elegant smoke plume
+      // 3. Central-left undulating smoke column
+      {
+        relX: 0.38,
+        driftX: -4,
+        height: 56,
+        baseW: 42,
+        speed: 0.68,
+        phase: 3.1,
+        curlFreq: 3.0,
+        isBack: false
+      },
+      // 4. Center main plume: tall elegant wisp with curling apex
       {
         relX: 0.50,
-        baseW: 52,
+        driftX: 3,
         height: 58,
-        speed: 0.65,
-        phase: 3.1,
-        curlDir: -1,
+        baseW: 44,
+        speed: 0.78,
+        phase: 4.4,
+        curlFreq: 3.4,
         isBack: false
       },
-      // 4. Right-center billowing plume
+      // 5. Central-right undulating smoke column
+      {
+        relX: 0.64,
+        driftX: 10,
+        height: 54,
+        baseW: 40,
+        speed: 0.70,
+        phase: 5.6,
+        curlFreq: 3.1,
+        isBack: false
+      },
+      // 6. Right-center plume: curving upwards with graceful outward hook
+      {
+        relX: 0.80,
+        driftX: 20,
+        height: 50,
+        baseW: 36,
+        speed: 0.88,
+        phase: 0.9,
+        curlFreq: 3.5,
+        isBack: false
+      },
+      // 7. Far right wing: curls outward to the right beyond button edge
+      {
+        relX: 0.95,
+        driftX: 44,
+        height: 44,
+        baseW: 28,
+        speed: 0.74,
+        phase: 2.3,
+        curlFreq: 3.3,
+        isBack: false
+      },
+      // 8. Deep left atmospheric veil
+      {
+        relX: 0.30,
+        driftX: -12,
+        height: 45,
+        baseW: 75,
+        speed: 0.52,
+        phase: 1.5,
+        curlFreq: 2.2,
+        isBack: true
+      },
+      // 9. Deep right atmospheric veil
       {
         relX: 0.70,
-        baseW: 44,
-        height: 48,
-        speed: 0.90,
-        phase: 4.4,
-        curlDir: 1,
-        isBack: false
-      },
-      // 5. Right corner curling plume (wraps around right curve)
-      {
-        relX: 0.90,
-        baseW: 30,
-        height: 40,
-        speed: 0.76,
-        phase: 5.6,
-        curlDir: 1,
-        isBack: false
-      },
-      // 6. Deep background atmospheric veil (provides optical depth between plumes)
-      {
-        relX: 0.42,
+        driftX: 14,
+        height: 46,
         baseW: 75,
-        height: 44,
-        speed: 0.52,
-        phase: 2.2,
-        curlDir: -1,
+        speed: 0.55,
+        phase: 4.0,
+        curlFreq: 2.2,
         isBack: true
       }
     ];
   }
 
+  initPuffs() {
+    // Volumetric smoke motes/puffs rising smoothly from behind the button
+    this.puffs = [];
+    const count = 22;
+    for (let i = 0; i < count; i++) {
+      this.puffs.push({
+        relX: 0.05 + Math.random() * 0.9,
+        yOffset: Math.random() * 50,
+        vy: 10 + Math.random() * 14,
+        radius: 22 + Math.random() * 20,
+        curlAmp: 12 + Math.random() * 18,
+        curlFreq: 1.2 + Math.random() * 1.5,
+        phase: Math.random() * Math.PI * 2,
+        life: Math.random(),
+        maxLife: 3.8 + Math.random() * 2.2,
+        isBack: Math.random() > 0.45
+      });
+    }
+  }
+
   initMotes() {
     this.motes = [];
-    for (let i = 0; i < 7; i++) {
+    for (let i = 0; i < 8; i++) {
       this.motes.push({
-        x: this.btnX + (0.15 + Math.random() * 0.7) * this.btnW,
-        y: this.btnY - 10 - Math.random() * 25,
-        vy: 16 + Math.random() * 20,
-        size: 1.0 + Math.random() * 1.4,
+        x: this.btnX + (0.1 + Math.random() * 0.8) * this.btnW,
+        y: this.btnY - 5 - Math.random() * 25,
+        vy: 14 + Math.random() * 18,
+        size: 0.9 + Math.random() * 1.2,
         life: Math.random(),
-        maxLife: 1.6 + Math.random() * 1.2,
+        maxLife: 2.0 + Math.random() * 1.8,
         phase: Math.random() * Math.PI * 2
       });
     }
@@ -1197,12 +1316,12 @@ class HeroSmokeEngine {
   bindEvents() {
     this.button.addEventListener('mouseenter', () => {
       this.targetHover = 1.0;
-      this.targetIntensity = 1.25;
+      this.targetIntensity = 1.28;
     });
 
     this.button.addEventListener('mouseleave', () => {
       this.targetHover = 0.0;
-      this.targetIntensity = 0.9;
+      this.targetIntensity = 1.0;
     });
 
     this.button.addEventListener('mousedown', () => {
@@ -1212,6 +1331,29 @@ class HeroSmokeEngine {
     window.addEventListener('resize', () => {
       this.initDimensions();
     });
+
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) {
+        this.pause();
+      } else if (this.overviewView && this.overviewView.classList.contains('active') && this.isVisible) {
+        this.resume();
+      }
+    });
+  }
+
+  setupObserver() {
+    if ('IntersectionObserver' in window) {
+      this.observer = new IntersectionObserver((entries) => {
+        const entry = entries[0];
+        this.isVisible = entry && entry.isIntersecting;
+        if (!this.isVisible) {
+          this.pause();
+        } else if (this.overviewView && this.overviewView.classList.contains('active')) {
+          this.resume();
+        }
+      }, { threshold: 0.05 });
+      this.observer.observe(this.canvas);
+    }
   }
 
   triggerClickBurst() {
@@ -1220,106 +1362,137 @@ class HeroSmokeEngine {
     this.intensity = 1.45;
   }
 
-  drawPlume(ctx, p, t, intensity, hover) {
-    const cx = this.btnX + p.relX * this.btnW;
-    const cy = this.btnY;
+  drawRibbonStream(ctx, p, t, intensity, hover) {
+    const baseX = this.btnX + p.relX * this.btnW;
+    const baseY = this.btnY + 6; // Behind button top edge
 
-    // Organic breathing height and width
-    const breathH = Math.sin(t * p.speed * 0.9 + p.phase);
-    const breathW = Math.cos(t * p.speed * 0.7 + p.phase);
-    const currentH = p.height * (1.0 + 0.16 * breathH) * (1.0 + 0.15 * hover);
-    const currentW = p.baseW * (1.0 + 0.12 * breathW);
+    const speed = p.speed * (1.0 + 0.15 * hover);
+    const plumeH = p.height * (1.0 + 0.14 * Math.sin(t * speed * 0.8 + p.phase)) * (1.0 + 0.18 * hover);
+    const baseW = p.baseW * (1.0 + 0.10 * Math.cos(t * speed * 0.6 + p.phase));
 
-    // Lateral wave sways for silky smoke curling
-    const sway1 = Math.sin(t * p.speed * 1.1 + p.phase) * (currentW * 0.28);
-    const sway2 = Math.cos(t * p.speed * 1.4 + p.phase * 1.3) * (currentW * 0.35);
-    const tipSway = Math.sin(t * p.speed * 0.8 + p.phase * 0.7) * (currentW * 0.45);
+    const steps = 24;
+    const du = 1.0 / steps;
 
-    // Anchors behind button rim
-    const xLeft = cx - currentW * 0.5;
-    const xRight = cx + currentW * 0.5;
-    const yBase = cy + 4;
+    const sprite = p.isBack ? this.spriteVeil : this.spriteRibbon;
 
-    // Plume tip
-    const xTip = cx + tipSway;
-    const yTip = cy - currentH;
+    for (let i = 0; i <= steps; i++) {
+      const u = i * du;
+      const y = baseY - u * plumeH;
 
-    // Control points for left boundary
-    const cp1Lx = xLeft + sway1 * 0.6;
-    const cp1Ly = cy - currentH * 0.35;
-    const cp2Lx = cx - currentW * 0.25 + sway2;
-    const cp2Ly = cy - currentH * 0.75;
+      // Silky curling sine waves along the spine
+      const curl1 = Math.sin(u * p.curlFreq * 3.14 - t * speed * 1.5 + p.phase) * (baseW * 0.35 * u);
+      const curl2 = Math.cos(u * p.curlFreq * 2.0 + t * speed * 1.1 + p.phase * 1.3) * (baseW * 0.20 * u);
+      const drift = p.driftX * Math.pow(u, 1.25);
+      const x = baseX + curl1 + curl2 + drift;
 
-    // Control points for right boundary
-    const cp2Rx = cx + currentW * 0.25 + sway2;
-    const cp2Ry = cy - currentH * 0.75;
-    const cp1Rx = xRight + sway1 * 0.6;
-    const cp1Ry = cy - currentH * 0.35;
+      // Width profile: gently blooms outwards then softly narrows near apex
+      const widthProfile = Math.sin(Math.pow(u, 0.7) * Math.PI);
+      const curW = baseW * (0.65 + 0.75 * widthProfile);
 
-    ctx.save();
-    ctx.beginPath();
-    ctx.moveTo(xLeft, yBase);
-    ctx.bezierCurveTo(cp1Lx, cp1Ly, cp2Lx, cp2Ly, xTip, yTip);
-    ctx.bezierCurveTo(cp2Rx, cp2Ry, cp1Rx, cp1Ry, xRight, yBase);
-    ctx.closePath();
+      // Smooth opacity falloff curve: peaks at 30-40% height and dissolves smoothly to zero
+      let alpha = 0;
+      if (u < 0.2) {
+        alpha = Math.sin((u / 0.2) * (Math.PI / 2));
+      } else {
+        alpha = Math.pow(Math.cos(((u - 0.2) / 0.8) * (Math.PI / 2)), 1.6);
+      }
+      alpha *= (p.isBack ? 0.32 : 0.62) * intensity;
 
-    // Smooth gradient fill: translucent deep crimson interior
-    const bodyGrad = ctx.createLinearGradient(cx, yBase, xTip, yTip);
-    const baseAlpha = (p.isBack ? 0.32 : 0.65) * intensity;
+      if (alpha <= 0.005) continue;
 
-    bodyGrad.addColorStop(0.0, `rgba(165, 12, 22, ${0.75 * baseAlpha})`);
-    bodyGrad.addColorStop(0.35, `rgba(215, 20, 36, ${0.60 * baseAlpha})`);
-    bodyGrad.addColorStop(0.70, `rgba(130, 8, 16, ${0.30 * baseAlpha})`);
-    bodyGrad.addColorStop(1.0, 'rgba(40, 2, 5, 0.0)');
+      ctx.save();
+      ctx.globalAlpha = Math.min(alpha, 1.0);
+      ctx.drawImage(
+        sprite,
+        x - curW * 0.5,
+        y - curW * 0.5,
+        curW,
+        curW
+      );
 
-    ctx.fillStyle = bodyGrad;
-    ctx.fill();
-
-    // Luminous scarlet edge highlights along the flowing contours
-    if (!p.isBack) {
-      const edgeGrad = ctx.createLinearGradient(cx, yBase, xTip, yTip);
-      const edgeAlpha = (0.75 + 0.3 * hover) * intensity;
-
-      edgeGrad.addColorStop(0.0, `rgba(220, 25, 40, ${0.35 * edgeAlpha})`);
-      edgeGrad.addColorStop(0.35, `rgba(255, 55, 75, ${0.85 * edgeAlpha})`);
-      edgeGrad.addColorStop(0.65, `rgba(255, 115, 135, ${0.80 * edgeAlpha})`);
-      edgeGrad.addColorStop(0.88, `rgba(255, 45, 65, ${0.30 * edgeAlpha})`);
-      edgeGrad.addColorStop(1.0, 'rgba(200, 20, 30, 0.0)');
-
-      ctx.strokeStyle = edgeGrad;
-      ctx.lineWidth = 1.8;
-      ctx.lineCap = 'round';
-      ctx.lineJoin = 'round';
-      ctx.shadowColor = '#ff2a3b';
-      ctx.shadowBlur = 8;
-
-      ctx.beginPath();
-      ctx.moveTo(xLeft, yBase);
-      ctx.bezierCurveTo(cp1Lx, cp1Ly, cp2Lx, cp2Ly, xTip, yTip);
-      ctx.stroke();
-
-      ctx.beginPath();
-      ctx.moveTo(xTip, yTip);
-      ctx.bezierCurveTo(cp2Rx, cp2Ry, cp1Rx, cp1Ry, xRight, yBase);
-      ctx.stroke();
+      // Luminous scarlet highlight stamp on outer crest of curl
+      if (!p.isBack && u > 0.15 && u < 0.75) {
+        const hlAlpha = alpha * 0.65 * (0.8 + 0.3 * hover);
+        if (hlAlpha > 0.02) {
+          ctx.globalAlpha = Math.min(hlAlpha, 1.0);
+          const hlW = curW * 0.5;
+          const hlOffset = Math.sin(u * p.curlFreq * 3.14 + p.phase) * (curW * 0.22);
+          ctx.drawImage(
+            this.spriteHighlight,
+            x + hlOffset - hlW * 0.5,
+            y - hlW * 0.5,
+            hlW,
+            hlW
+          );
+        }
+      }
+      ctx.restore();
     }
+  }
 
-    ctx.restore();
+  drawVolumetricPuffs(ctx, dt, intensity) {
+    for (const puff of this.puffs) {
+      puff.life += dt / puff.maxLife;
+      if (puff.life >= 1.0) {
+        puff.life = 0;
+        puff.relX = 0.05 + Math.random() * 0.9;
+        puff.yOffset = 0;
+        puff.vy = 10 + Math.random() * 14;
+        puff.radius = 22 + Math.random() * 20;
+      }
+
+      puff.yOffset += puff.vy * dt;
+      const progress = puff.life;
+
+      const baseX = this.btnX + puff.relX * this.btnW;
+      const baseY = this.btnY + 6;
+      const y = baseY - puff.yOffset;
+
+      // Outward curling drift
+      const lateralBias = (puff.relX - 0.5) * 50 * progress;
+      const curl = Math.sin(this.time * puff.curlFreq + puff.phase) * puff.curlAmp * progress;
+      const x = baseX + lateralBias + curl;
+
+      // Smooth bell curve opacity
+      const alpha = Math.sin(progress * Math.PI) * (puff.isBack ? 0.28 : 0.42) * intensity;
+      if (alpha <= 0.01) continue;
+
+      const curRadius = puff.radius * (1.0 + progress * 0.9);
+      const sprite = puff.isBack ? this.spriteVeil : this.spriteRibbon;
+
+      ctx.save();
+      ctx.globalAlpha = Math.min(alpha, 1.0);
+      ctx.drawImage(
+        sprite,
+        x - curRadius,
+        y - curRadius,
+        curRadius * 2,
+        curRadius * 2
+      );
+      ctx.restore();
+    }
   }
 
   drawAtmosphericAura(ctx, intensity) {
     const cx = this.btnX + this.btnW / 2;
-    const cy = this.btnY + 6;
-    const radius = (this.btnW / 2 + 35) * (0.9 + 0.15 * this.hover);
-
-    const aura = ctx.createRadialGradient(cx, cy, 10, cx, cy, radius);
-    aura.addColorStop(0.0, `rgba(210, 18, 32, ${0.25 * intensity})`);
-    aura.addColorStop(0.5, `rgba(130, 10, 20, ${0.10 * intensity})`);
-    aura.addColorStop(1.0, 'rgba(0, 0, 0, 0)');
+    const cy = this.btnY + 8;
+    const radiusX = (this.btnW * 0.75) * (0.95 + 0.12 * this.hover);
+    const radiusY = 55;
 
     ctx.save();
+    ctx.translate(cx, cy);
+    ctx.scale(1.0, radiusY / radiusX);
+
+    const aura = ctx.createRadialGradient(0, 0, 10, 0, 0, radiusX);
+    aura.addColorStop(0.0, `rgba(205, 18, 30, ${0.28 * intensity})`);
+    aura.addColorStop(0.4, `rgba(130, 10, 18, ${0.12 * intensity})`);
+    aura.addColorStop(0.8, `rgba(45, 2, 6, ${0.03 * intensity})`);
+    aura.addColorStop(1.0, 'rgba(0, 0, 0, 0)');
+
     ctx.fillStyle = aura;
-    ctx.fillRect(0, 0, this.width, this.height);
+    ctx.beginPath();
+    ctx.arc(0, 0, radiusX, 0, Math.PI * 2);
+    ctx.fill();
     ctx.restore();
   }
 
@@ -1329,22 +1502,21 @@ class HeroSmokeEngine {
       m.life += dt / m.maxLife;
       if (m.life >= 1.0) {
         m.life = 0;
-        m.x = this.btnX + (0.15 + Math.random() * 0.7) * this.btnW;
-        m.y = this.btnY - 10 - Math.random() * 20;
-        m.vy = 16 + Math.random() * 20;
-        m.size = 1.0 + Math.random() * 1.4;
+        m.x = this.btnX + (0.1 + Math.random() * 0.8) * this.btnW;
+        m.y = this.btnY - 5 - Math.random() * 15;
+        m.vy = 14 + Math.random() * 18;
       }
 
       m.y -= m.vy * dt;
-      m.x += Math.sin(this.time * 1.8 + m.phase) * 8 * dt;
+      m.x += Math.sin(this.time * 1.6 + m.phase) * 7 * dt;
 
-      const alpha = Math.sin(m.life * Math.PI) * 0.45 * intensity;
+      const alpha = Math.sin(m.life * Math.PI) * 0.40 * intensity;
       if (alpha <= 0.01) continue;
 
       ctx.beginPath();
       ctx.arc(m.x, m.y, m.size, 0, Math.PI * 2);
-      ctx.fillStyle = `rgba(255, 65, 85, ${alpha})`;
-      ctx.shadowColor = '#ff2a3b';
+      ctx.fillStyle = `rgba(255, 85, 100, ${alpha})`;
+      ctx.shadowColor = '#ff2b3c';
       ctx.shadowBlur = 6;
       ctx.fill();
     }
@@ -1357,29 +1529,45 @@ class HeroSmokeEngine {
     ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
     ctx.clearRect(0, 0, this.width, this.height);
 
-    // 1. Soft atmospheric red aura behind the button
+    // 1. Soft atmospheric crimson base
     this.drawAtmosphericAura(ctx, this.intensity);
 
-    // 2. Additive layer for smoke formations
+    // 2. Additive layer for smoke billowing and ribbons
     ctx.globalCompositeOperation = 'screen';
 
-    // Draw background plume first for depth
+    // Draw background veil plumes first for depth
     for (const p of this.plumes) {
       if (p.isBack) {
-        this.drawPlume(ctx, p, this.time, this.intensity, this.hover);
+        this.drawRibbonStream(ctx, p, this.time, this.intensity, this.hover);
       }
     }
 
-    // Draw primary flowing smoke plumes
+    // Draw volumetric smoke puffs
+    this.drawVolumetricPuffs(ctx, dt, this.intensity);
+
+    // Draw primary flowing ribbon plumes
     for (const p of this.plumes) {
       if (!p.isBack) {
-        this.drawPlume(ctx, p, this.time, this.intensity, this.hover);
+        this.drawRibbonStream(ctx, p, this.time, this.intensity, this.hover);
       }
     }
 
-    // 3. Subtle floating smoke motes
+    // 3. Subtle floating embers / motes
     this.drawSmokeMotes(ctx, dt, this.intensity);
 
+    ctx.restore();
+  }
+
+  drawStaticHaze() {
+    const ctx = this.ctx;
+    ctx.save();
+    ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+    ctx.clearRect(0, 0, this.width, this.height);
+    this.drawAtmosphericAura(ctx, 0.9);
+    ctx.globalCompositeOperation = 'screen';
+    for (const p of this.plumes) {
+      this.drawRibbonStream(ctx, p, 1.2, 0.85, 0.0);
+    }
     ctx.restore();
   }
 
@@ -1391,16 +1579,22 @@ class HeroSmokeEngine {
       return;
     }
 
+    let speedMul = 1.0;
+    if (this.container) {
+      const sp = parseFloat(getComputedStyle(this.container).getPropertyValue('--smoke-speed'));
+      if (!isNaN(sp) && sp > 0) speedMul = sp;
+    }
+
     const dt = Math.min((now - this.lastTimestamp) / 1000, 0.08);
     this.lastTimestamp = now;
-    this.time += dt;
+    this.time += dt * speedMul;
 
-    // Smooth lerp to target states
+    // Smooth state lerp
     const lerpFactor = 1 - Math.exp(-dt * 6.0);
     this.intensity += (this.targetIntensity - this.intensity) * lerpFactor;
     this.hover += (this.targetHover - this.hover) * lerpFactor;
 
-    // Click pulse
+    // Burst pulse
     if (this.burstActive) {
       this.burst += dt / 0.35;
       if (this.burst >= 1.0) {
@@ -1414,7 +1608,7 @@ class HeroSmokeEngine {
   }
 
   start() {
-    if (this.running) return;
+    if (this.running || this.prefersReducedMotion) return;
     this.running = true;
     this.lastTimestamp = performance.now();
     this.animId = requestAnimationFrame(t => this.tick(t));
