@@ -495,13 +495,13 @@ class OrbScanEngine {
 
     // Accessibility check: smooth reduced motion adaptation
     this.reducedMotion = typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    this.peakScale = this.reducedMotion ? 1.25 : 2.15;
+    this.peakScale = this.reducedMotion ? 1.35 : 2.45;
 
     // Liquid Glass character stream configuration
-    this.charSpacing = 24; // Consistent rhythmic spacing between liquid glass tiles
-    this.tileW = 18;       // Base tile width (px)
-    this.tileH = 26;       // Base tile height (px)
-    this.tileRadius = 4.5; // Smooth rounded corner radius (px)
+    this.charSpacing = 32; // Increased spacing for clear visual distinction between tiles
+    this.tileW = 22;       // Increased default tile width (px)
+    this.tileH = 32;       // Increased default tile height (px)
+    this.tileRadius = 5.5; // Smooth rounded corner radius (px)
     this.streamSpeed = 85; // px per second from LEFT to RIGHT
     this.separator = '     •••     ';
     this.fullStreamText = this.rawUrl + this.separator;
@@ -600,9 +600,9 @@ class OrbScanEngine {
       c.scanGlow = Math.max(0, 1 - (distToCenter / 48));
 
       // Character-by-character optical magnification lens:
-      // Magnifies smoothly up to peakScale (2.15x) as the character crosses the exact center of the orb,
+      // Magnifies smoothly up to peakScale (2.45x) as the character crosses the exact center of the orb,
       // and smoothly reduces back to original 1.0x as it exits.
-      const magRadius = 26;
+      const magRadius = 34;
       if (distToCenter < magRadius) {
         const u = 1 - (distToCenter / magRadius);
         // Smooth sinusoidal easing (C^1 continuous, zero sudden jumps at edges and apex)
@@ -809,21 +809,21 @@ class OrbScanEngine {
 
   drawCharacterTrail(ctx, c) {
     if (!c || c.magFactor <= 0.15) return;
-    const trailLen = 32 * c.magFactor;
+    const trailLen = 42 * c.magFactor;
     const trailGrad = ctx.createLinearGradient(c.x, c.y, c.x - trailLen, c.y);
-    trailGrad.addColorStop(0, `rgba(255, 213, 79, ${(0.45 * c.magFactor).toFixed(2)})`);
-    trailGrad.addColorStop(0.35, `rgba(255, 42, 59, ${(0.35 * c.magFactor).toFixed(2)})`);
+    trailGrad.addColorStop(0, `rgba(255, 215, 80, ${(0.55 * c.magFactor).toFixed(2)})`);
+    trailGrad.addColorStop(0.35, `rgba(255, 42, 59, ${(0.45 * c.magFactor).toFixed(2)})`);
     trailGrad.addColorStop(1, 'rgba(255, 42, 59, 0)');
 
     ctx.save();
     ctx.beginPath();
-    ctx.moveTo(c.x, c.y - 1.5);
+    ctx.moveTo(c.x, c.y - 2);
     ctx.lineTo(c.x - trailLen, c.y);
-    ctx.lineTo(c.x, c.y + 1.5);
+    ctx.lineTo(c.x, c.y + 2);
     ctx.closePath();
     ctx.fillStyle = trailGrad;
     ctx.shadowColor = '#ffd54f';
-    ctx.shadowBlur = 8 * c.magFactor;
+    ctx.shadowBlur = 10 * c.magFactor;
     ctx.fill();
     ctx.restore();
   }
@@ -839,7 +839,7 @@ class OrbScanEngine {
     const isPeakCenter = c.magFactor > 0.45;
 
     // Slight forward floating 3D elevation (Z-elevation lift toward viewer)
-    const floatY = -3.5 * c.magFactor;
+    const floatY = -4.5 * c.magFactor;
 
     ctx.save();
     ctx.globalAlpha = c.opacity;
@@ -850,14 +850,27 @@ class OrbScanEngine {
       ctx.scale(c.scale, c.scale);
     }
 
-    // 1. Ambient Drop Shadow for 3D elevation
+    // 1. Ambient Drop Shadow and Outer Crimson/Amber Laser Glow for 3D elevation
     if (isMagnified) {
+      // Outer radiant cybersecurity laser aura
+      const auraRadius = (Math.max(w, h) / 2) + 16 * c.magFactor;
+      const aura = ctx.createRadialGradient(0, 0, 0, 0, 0, auraRadius);
+      aura.addColorStop(0, `rgba(255, 255, 255, ${(0.42 * c.magFactor).toFixed(3)})`);
+      aura.addColorStop(0.3, `rgba(255, 42, 59, ${(0.68 * c.magFactor).toFixed(3)})`);
+      aura.addColorStop(0.7, `rgba(255, 180, 50, ${(0.38 * c.magFactor).toFixed(3)})`);
+      aura.addColorStop(1, 'rgba(255, 42, 59, 0)');
+      ctx.fillStyle = aura;
+      ctx.beginPath();
+      ctx.arc(0, 0, auraRadius, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Deep 3D drop shadow beneath the floating tile
       ctx.save();
-      ctx.shadowColor = 'rgba(0, 0, 0, 0.75)';
-      ctx.shadowBlur = 12 * c.magFactor;
-      ctx.shadowOffsetY = 4 * c.magFactor;
+      ctx.shadowColor = 'rgba(0, 0, 0, 0.82)';
+      ctx.shadowBlur = 14 * c.magFactor;
+      ctx.shadowOffsetY = 5 * c.magFactor;
       this.roundRect(ctx, -w / 2, -h / 2, w, h, r);
-      ctx.fillStyle = 'rgba(10, 12, 16, 0.4)';
+      ctx.fillStyle = 'rgba(10, 12, 16, 0.5)';
       ctx.fill();
       ctx.restore();
     }
@@ -865,37 +878,37 @@ class OrbScanEngine {
     // 2. Liquid Glass Translucent Body
     const glassGrad = ctx.createLinearGradient(0, -h / 2, 0, h / 2);
     if (isMagnified) {
-      glassGrad.addColorStop(0, 'rgba(42, 48, 64, 0.88)');
-      glassGrad.addColorStop(0.4, 'rgba(20, 22, 32, 0.92)');
-      glassGrad.addColorStop(1, 'rgba(58, 14, 26, 0.95)');
+      glassGrad.addColorStop(0, 'rgba(46, 54, 72, 0.90)');
+      glassGrad.addColorStop(0.38, 'rgba(22, 25, 36, 0.94)');
+      glassGrad.addColorStop(1, 'rgba(68, 16, 30, 0.98)');
     } else {
-      glassGrad.addColorStop(0, 'rgba(28, 32, 42, 0.76)');
-      glassGrad.addColorStop(0.5, 'rgba(14, 16, 22, 0.84)');
-      glassGrad.addColorStop(1, 'rgba(26, 10, 16, 0.88)');
+      glassGrad.addColorStop(0, 'rgba(30, 34, 46, 0.80)');
+      glassGrad.addColorStop(0.5, 'rgba(16, 18, 24, 0.86)');
+      glassGrad.addColorStop(1, 'rgba(28, 10, 18, 0.92)');
     }
     this.roundRect(ctx, -w / 2, -h / 2, w, h, r);
     ctx.fillStyle = glassGrad;
     ctx.fill();
 
-    // 3. Multi-directional Bevel Rim Stroke (Fine Reflective Borders)
+    // 3. Multi-directional Bevel Rim Stroke (Enhanced fine reflective borders)
     const strokeGrad = ctx.createLinearGradient(-w / 2, -h / 2, w / 2, h / 2);
     if (isMagnified) {
-      strokeGrad.addColorStop(0, `rgba(255, 255, 255, ${(0.7 + 0.3 * c.magFactor).toFixed(2)})`);
-      strokeGrad.addColorStop(0.3, `rgba(255, 200, 80, ${(0.6 + 0.3 * c.magFactor).toFixed(2)})`);
-      strokeGrad.addColorStop(0.7, `rgba(255, 42, 59, ${(0.8 + 0.2 * c.magFactor).toFixed(2)})`);
-      strokeGrad.addColorStop(1, 'rgba(255, 42, 59, 0.95)');
+      strokeGrad.addColorStop(0, `rgba(255, 255, 255, ${(0.85 + 0.15 * c.magFactor).toFixed(2)})`);
+      strokeGrad.addColorStop(0.3, `rgba(255, 215, 80, ${(0.75 + 0.25 * c.magFactor).toFixed(2)})`);
+      strokeGrad.addColorStop(0.7, `rgba(255, 42, 59, ${(0.88 + 0.12 * c.magFactor).toFixed(2)})`);
+      strokeGrad.addColorStop(1, 'rgba(255, 42, 59, 1)');
       ctx.strokeStyle = strokeGrad;
-      ctx.lineWidth = 1.2;
-      ctx.shadowColor = `rgba(255, 42, 59, ${(0.6 * c.magFactor).toFixed(2)})`;
-      ctx.shadowBlur = 8 + 10 * c.magFactor;
+      ctx.lineWidth = 1.4;
+      ctx.shadowColor = `rgba(255, 42, 59, ${(0.75 * c.magFactor).toFixed(2)})`;
+      ctx.shadowBlur = 10 + 14 * c.magFactor;
     } else {
-      strokeGrad.addColorStop(0, 'rgba(255, 255, 255, 0.35)');
-      strokeGrad.addColorStop(0.4, 'rgba(255, 42, 59, 0.25)');
-      strokeGrad.addColorStop(1, 'rgba(255, 42, 59, 0.45)');
+      strokeGrad.addColorStop(0, 'rgba(255, 255, 255, 0.45)');
+      strokeGrad.addColorStop(0.4, 'rgba(255, 42, 59, 0.32)');
+      strokeGrad.addColorStop(1, 'rgba(255, 42, 59, 0.55)');
       ctx.strokeStyle = strokeGrad;
-      ctx.lineWidth = 0.9;
-      ctx.shadowColor = 'rgba(255, 42, 59, 0.2)';
-      ctx.shadowBlur = 4;
+      ctx.lineWidth = 1.0;
+      ctx.shadowColor = 'rgba(255, 42, 59, 0.25)';
+      ctx.shadowBlur = 5;
     }
     this.roundRect(ctx, -w / 2, -h / 2, w, h, r);
     ctx.stroke();
@@ -906,11 +919,11 @@ class OrbScanEngine {
     ctx.clip();
 
     ctx.beginPath();
-    ctx.ellipse(0, -h * 0.45, w * 0.75, h * 0.32, 0, 0, Math.PI * 2);
+    ctx.ellipse(0, -h * 0.44, w * 0.78, h * 0.34, 0, 0, Math.PI * 2);
     const glossGrad = ctx.createLinearGradient(0, -h / 2, 0, 0);
-    const glossAlpha = isMagnified ? 0.45 + 0.25 * c.magFactor : 0.25;
+    const glossAlpha = isMagnified ? 0.60 + 0.25 * c.magFactor : 0.32;
     glossGrad.addColorStop(0, `rgba(255, 255, 255, ${glossAlpha.toFixed(2)})`);
-    glossGrad.addColorStop(0.6, `rgba(255, 255, 255, ${(glossAlpha * 0.3).toFixed(2)})`);
+    glossGrad.addColorStop(0.55, `rgba(255, 255, 255, ${(glossAlpha * 0.35).toFixed(2)})`);
     glossGrad.addColorStop(1, 'rgba(255, 255, 255, 0)');
     ctx.fillStyle = glossGrad;
     ctx.fill();
@@ -919,21 +932,21 @@ class OrbScanEngine {
     ctx.beginPath();
     ctx.moveTo(-w / 2 + r, -h / 2 + 1);
     ctx.lineTo(w / 2 - r, -h / 2 + 1);
-    ctx.strokeStyle = `rgba(255, 255, 255, ${isMagnified ? 0.75 : 0.4})`;
-    ctx.lineWidth = 0.75;
+    ctx.strokeStyle = `rgba(255, 255, 255, ${isMagnified ? 0.85 : 0.48})`;
+    ctx.lineWidth = 0.85;
     ctx.stroke();
     ctx.restore();
 
     // 5. Crisp, Centered Typography (High Contrast Against Laser)
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.font = '700 13px ui-monospace, SFMono-Regular, "JetBrains Mono", Menlo, Consolas, monospace';
+    ctx.font = '700 15px ui-monospace, SFMono-Regular, "JetBrains Mono", Menlo, Consolas, monospace';
 
     if (isPeakCenter) {
-      // Brilliant laser white glyph with gold inner core corona
+      // Brilliant laser white glyph with rich gold inner core corona
       ctx.fillStyle = '#ffe082';
       ctx.shadowColor = '#ffd54f';
-      ctx.shadowBlur = 12;
+      ctx.shadowBlur = 14;
       ctx.fillText(c.char, 0, 0);
 
       ctx.fillStyle = '#ffffff';
@@ -949,8 +962,8 @@ class OrbScanEngine {
     } else {
       // Standard resting stream: crisp cyber monospace glyph
       ctx.fillStyle = 'rgba(240, 244, 250, 0.95)';
-      ctx.shadowColor = 'rgba(255, 42, 59, 0.7)';
-      ctx.shadowBlur = 5;
+      ctx.shadowColor = 'rgba(255, 42, 59, 0.75)';
+      ctx.shadowBlur = 6;
       ctx.fillText(c.char, 0, 0);
     }
 
@@ -1403,43 +1416,139 @@ function renderResult(data) {
   $('#result').classList.remove('hidden');
 }
 
+let isScanning = false;
 let activeScanEngine = null;
 let activeTimelineController = null;
 
+/**
+ * Strict initial client-side URL validation.
+ * Rejects empty, non-URL, non-HTTP(S), or illegal input before triggering any animation or scroll.
+ */
+function validateTargetUrlInput(raw) {
+  const trimmed = String(raw || '').trim();
+  if (!trimmed) {
+    throw new Error('Please enter a target URL to analyze.');
+  }
+  if (trimmed.length > 2048) {
+    throw new Error('URL exceeds the maximum length limit of 2,048 characters.');
+  }
+  if (/[\x00-\x1F\x7F]/.test(trimmed)) {
+    throw new Error('URL contains illegal control characters or null bytes.');
+  }
+  let parsed;
+  try {
+    parsed = new URL(trimmed);
+  } catch {
+    if (!/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(trimmed)) {
+      throw new Error('Enter a valid URL including protocol (e.g. https://example.com).');
+    }
+    throw new Error('Invalid URL format. Please enter a syntactically valid URL.');
+  }
+  if (!['http:', 'https:'].includes(parsed.protocol)) {
+    throw new Error(`Protocol "${parsed.protocol}" is not supported. Only HTTP and HTTPS URLs can be analyzed.`);
+  }
+  if (!parsed.hostname) {
+    throw new Error('URL does not specify a valid host domain.');
+  }
+  return trimmed;
+}
+
+/**
+ * Automatically and smoothly scrolls the viewport directly to the scanning orb chamber.
+ * Centers the orb on desktop, clears sticky header on mobile, avoids abrupt jumps,
+ * and respects prefers-reduced-motion.
+ */
+function scrollToScanningOrb() {
+  const stage = $('#scan-stage');
+  if (!stage) return;
+
+  const prefersReducedMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const behavior = prefersReducedMotion ? 'auto' : 'smooth';
+
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      // Accurately determine sticky navigation offset (mobile sidebar vs desktop topbar)
+      const isMobile = window.innerWidth <= 768;
+      const stickyHeader = isMobile ? $('.sidebar') : ($('.topbar') || $('header'));
+      const headerHeight = stickyHeader ? stickyHeader.getBoundingClientRect().height : 70;
+      const navOffset = Math.max(64, Math.round(headerHeight) + 12);
+
+      const stageRect = stage.getBoundingClientRect();
+      const currentScrollY = window.pageYOffset || document.documentElement.scrollTop;
+      const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
+
+      // Position the scanning orb chamber comfortably in the user's field of view
+      let targetY;
+      if (stageRect.height < viewportHeight - navOffset) {
+        // Entire scanning stage fits in view: vertically center it within remaining viewport space
+        const verticalPadding = (viewportHeight - navOffset - stageRect.height) / 2;
+        targetY = currentScrollY + stageRect.top - navOffset - Math.max(0, verticalPadding);
+      } else {
+        // Taller than viewport (mobile): position top of stage just beneath sticky navigation
+        targetY = currentScrollY + stageRect.top - navOffset;
+      }
+
+      window.scrollTo({
+        top: Math.max(0, Math.round(targetY)),
+        behavior
+      });
+    });
+  });
+}
+
 async function scan() {
+  // Prevent repeated clicks or overlapping animation/scroll runs
+  if (isScanning) return;
+
   const input = $('#url-input');
-  const raw = input.value.trim();
-  if (!raw) {
-    toast('Please enter a target URL to analyze.', 'warn');
-    input.focus();
+  const rawInput = input ? input.value : '';
+
+  // 1. Initial pre-flight URL validation: DO NOT scroll or start if invalid
+  let validatedUrl;
+  try {
+    validatedUrl = validateTargetUrlInput(rawInput);
+  } catch (err) {
+    toast(err.message, 'warn');
+    if (input) input.focus();
     return;
   }
 
-  // 1. Clean up any previous active scanning engine instance
+  isScanning = true;
+  const scanBtn = $('#scan-btn');
+  if (scanBtn) {
+    scanBtn.disabled = true;
+    scanBtn.textContent = 'ANALYZING…';
+  }
+
+  // 2. Clean up any previous active scanning engine instance
   if (activeScanEngine) {
     activeScanEngine.stop();
     activeScanEngine = null;
   }
 
-  $('#scan-btn').disabled = true;
-  $('#scan-btn').textContent = 'ANALYZING…';
   $('#result').classList.add('hidden');
-  $('#scan-stage').classList.remove('hidden');
+  const scanStage = $('#scan-stage');
+  if (scanStage) {
+    scanStage.classList.remove('hidden');
+  }
 
   // Set target URL displays
   const targetLabel = $('#scan-target');
-  if (targetLabel) targetLabel.textContent = raw;
+  if (targetLabel) targetLabel.textContent = validatedUrl;
 
-  // Initialize Canvas & Timeline Controllers
+  // 3. Immediately start scanning animation & audio
   const canvas = $('#scan-orb-canvas');
   if (canvas) {
     globalAudioEngine.startScan();
-    activeScanEngine = new OrbScanEngine(canvas, raw, globalAudioEngine);
+    activeScanEngine = new OrbScanEngine(canvas, validatedUrl, globalAudioEngine);
     activeScanEngine.start();
   }
 
   activeTimelineController = new TimelineStageController();
   activeTimelineController.setStage(1, 'PARSING STRUCTURE');
+
+  // 4. Automatically and smoothly navigate to the scanning orb section
+  scrollToScanningOrb();
 
   const MIN_SCAN_DURATION = 4000; // at least 4.0 seconds duration
   const startTime = Date.now();
@@ -1461,7 +1570,7 @@ async function scan() {
   try {
     // RUN IN PARALLEL: Actual backend/client scan AND minimum 4s timer
     const [data] = await Promise.all([
-      requestScan(raw),
+      requestScan(validatedUrl),
       new Promise(resolve => setTimeout(resolve, MIN_SCAN_DURATION))
     ]);
 
@@ -1506,8 +1615,12 @@ async function scan() {
     globalAudioEngine.stopScan();
     toast(error.message || 'Unable to complete scan.', 'danger');
   } finally {
-    $('#scan-btn').disabled = false;
-    $('#scan-btn').innerHTML = 'ANALYSE TARGET <span>→</span>';
+    isScanning = false;
+    const scanBtn = $('#scan-btn');
+    if (scanBtn) {
+      scanBtn.disabled = false;
+      scanBtn.innerHTML = 'ANALYSE TARGET <span>→</span>';
+    }
   }
 }
 
