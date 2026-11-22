@@ -477,7 +477,7 @@ class OrbScanEngine {
     this.rawUrl = rawUrl || 'https://target-domain.com';
     this.audio = audioEngine || globalAudioEngine;
 
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const dpr = Math.min((typeof window !== 'undefined' && window.devicePixelRatio) || 1, 2);
     this.width = 520;
     this.height = 520;
     this.canvas.width = this.width * dpr;
@@ -525,7 +525,9 @@ class OrbScanEngine {
         x: curX,
         y: this.baselineY,
         scanGlow: 0,
-        opacity: 0
+        opacity: 0,
+        scale: 1.0,
+        magFactor: 0
       });
       curX += this.charSpacing;
     }
@@ -590,6 +592,20 @@ class OrbScanEngine {
       // Scanning field illumination factor: illuminates when crossing center
       c.scanGlow = Math.max(0, 1 - (distToCenter / 48));
 
+      // Character-by-character optical magnification lens:
+      // Magnifies smoothly up to ~1.65x as the character crosses the exact center of the orb,
+      // and smoothly reduces back to original 1.0x as it exits.
+      const magRadius = 26;
+      if (distToCenter < magRadius) {
+        const u = 1 - (distToCenter / magRadius);
+        // Smooth sinusoidal easing (C^1 continuous, zero sudden jumps at edges and apex)
+        c.magFactor = 0.5 * (1 - Math.cos(u * Math.PI));
+        c.scale = 1.0 + 0.65 * c.magFactor;
+      } else {
+        c.magFactor = 0;
+        c.scale = 1.0;
+      }
+
       // Smooth horizontal fade-in at left and fade-out at right
       let opacity = 1.0;
       if (c.x < 110) {
@@ -618,7 +634,9 @@ class OrbScanEngine {
         x: newX,
         y: this.baselineY,
         scanGlow: 0,
-        opacity: 0
+        opacity: 0,
+        scale: 1.0,
+        magFactor: 0
       });
       minX = newX;
     }
@@ -773,8 +791,6 @@ class OrbScanEngine {
 
   drawHorizontalCharacters(ctx) {
     ctx.save();
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
 
     for (const c of this.characters) {
       if (c.opacity <= 0.01) continue;
@@ -782,36 +798,62 @@ class OrbScanEngine {
       ctx.save();
       ctx.globalAlpha = c.opacity;
 
-      const isScanned = c.scanGlow > 0.1;
-      const isCenterFocal = c.scanGlow > 0.65;
+      // Translate origin to character baseline position so scaling originates strictly from character's center
+      ctx.translate(c.x, c.y);
+      if (c.scale && c.scale !== 1.0) {
+        ctx.scale(c.scale, c.scale);
+      }
 
-      if (isCenterFocal) {
-        // Center scanning laser focus: brilliant white-gold illumination
-        ctx.font = '800 20px ui-monospace, SFMono-Regular, "JetBrains Mono", Menlo, Consolas, monospace';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.font = '700 17px ui-monospace, SFMono-Regular, "JetBrains Mono", Menlo, Consolas, monospace';
+
+      const isMagnified = c.magFactor > 0.02;
+      const isPeakCenter = c.magFactor > 0.45;
+
+      // Subtle optical magnification aura behind magnified character (coordinated with orb's crimson-gold energy)
+      if (isMagnified && c.char && c.char.trim() !== '') {
+        const auraRadius = 14 + 6 * c.magFactor;
+        const aura = ctx.createRadialGradient(0, 0, 0, 0, 0, auraRadius);
+        aura.addColorStop(0, `rgba(255, 255, 255, ${(0.32 * c.magFactor).toFixed(3)})`);
+        aura.addColorStop(0.35, `rgba(255, 42, 59, ${(0.42 * c.magFactor).toFixed(3)})`);
+        aura.addColorStop(0.75, `rgba(255, 213, 79, ${(0.18 * c.magFactor).toFixed(3)})`);
+        aura.addColorStop(1, 'rgba(255, 42, 59, 0)');
+        ctx.fillStyle = aura;
+        ctx.beginPath();
+        ctx.arc(0, 0, auraRadius, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      if (isPeakCenter) {
+        // Center scanning laser focus: brilliant laser white with gold-crimson illumination
         ctx.fillStyle = '#ffffff';
         ctx.shadowColor = '#ffffff';
-        ctx.shadowBlur = 18;
-        ctx.fillText(c.char, c.x, c.y);
+        ctx.shadowBlur = 16 + 8 * c.magFactor;
+        ctx.fillText(c.char, 0, 0);
 
-        // Secondary laser corona glow
+        // Secondary laser corona glow in gold/amber
         ctx.fillStyle = '#ffd54f';
         ctx.shadowColor = '#ffd54f';
-        ctx.shadowBlur = 24;
-        ctx.fillText(c.char, c.x, c.y);
-      } else if (isScanned) {
-        // Entering scanning beam: bright glowing crimson-gold
-        ctx.font = '700 18px ui-monospace, SFMono-Regular, "JetBrains Mono", Menlo, Consolas, monospace';
+        ctx.shadowBlur = 20 + 8 * c.magFactor;
+        ctx.fillText(c.char, 0, 0);
+      } else if (isMagnified) {
+        // Entering/exiting magnification: smooth crimson-gold scanning glow
         ctx.fillStyle = '#ffffff';
         ctx.shadowColor = '#ff2a3b';
-        ctx.shadowBlur = 14;
-        ctx.fillText(c.char, c.x, c.y);
+        ctx.shadowBlur = 12 + 8 * c.magFactor;
+        ctx.fillText(c.char, 0, 0);
+
+        ctx.fillStyle = 'rgba(255, 220, 225, 0.95)';
+        ctx.shadowColor = '#ffd54f';
+        ctx.shadowBlur = 10 * c.magFactor;
+        ctx.fillText(c.char, 0, 0);
       } else {
-        // Standard horizontal stream: crisp, glowing cyber red monospace glyph (NO BOX)
-        ctx.font = '700 17px ui-monospace, SFMono-Regular, "JetBrains Mono", Menlo, Consolas, monospace';
+        // Standard horizontal stream: crisp, glowing cyber red monospace glyph (normal size 1.0x)
         ctx.fillStyle = 'rgba(255, 220, 225, 0.95)';
         ctx.shadowColor = 'rgba(255, 42, 59, 0.85)';
-        ctx.shadowBlur = 9;
-        ctx.fillText(c.char, c.x, c.y);
+        ctx.shadowBlur = 8;
+        ctx.fillText(c.char, 0, 0);
       }
 
       ctx.restore();
