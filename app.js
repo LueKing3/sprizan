@@ -493,8 +493,15 @@ class OrbScanEngine {
     this.animId = null;
     this.laserAngle = 0;
 
-    // Horizontal character stream configuration
-    this.charSpacing = 22; // consistent spacing between glyphs
+    // Accessibility check: smooth reduced motion adaptation
+    this.reducedMotion = typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    this.peakScale = this.reducedMotion ? 1.25 : 2.15;
+
+    // Liquid Glass character stream configuration
+    this.charSpacing = 24; // Consistent rhythmic spacing between liquid glass tiles
+    this.tileW = 18;       // Base tile width (px)
+    this.tileH = 26;       // Base tile height (px)
+    this.tileRadius = 4.5; // Smooth rounded corner radius (px)
     this.streamSpeed = 85; // px per second from LEFT to RIGHT
     this.separator = '     •••     ';
     this.fullStreamText = this.rawUrl + this.separator;
@@ -593,14 +600,14 @@ class OrbScanEngine {
       c.scanGlow = Math.max(0, 1 - (distToCenter / 48));
 
       // Character-by-character optical magnification lens:
-      // Magnifies smoothly up to ~1.65x as the character crosses the exact center of the orb,
+      // Magnifies smoothly up to peakScale (2.15x) as the character crosses the exact center of the orb,
       // and smoothly reduces back to original 1.0x as it exits.
       const magRadius = 26;
       if (distToCenter < magRadius) {
         const u = 1 - (distToCenter / magRadius);
         // Smooth sinusoidal easing (C^1 continuous, zero sudden jumps at edges and apex)
         c.magFactor = 0.5 * (1 - Math.cos(u * Math.PI));
-        c.scale = 1.0 + 0.65 * c.magFactor;
+        c.scale = 1.0 + (this.peakScale - 1.0) * c.magFactor;
       } else {
         c.magFactor = 0;
         c.scale = 1.0;
@@ -789,74 +796,184 @@ class OrbScanEngine {
     ctx.restore();
   }
 
+  roundRect(ctx, x, y, w, h, r) {
+    const minR = Math.min(r, w / 2, h / 2);
+    ctx.beginPath();
+    ctx.moveTo(x + minR, y);
+    ctx.arcTo(x + w, y, x + w, y + h, minR);
+    ctx.arcTo(x + w, y + h, x, y + h, minR);
+    ctx.arcTo(x, y + h, x, y, minR);
+    ctx.arcTo(x, y, x + w, y, minR);
+    ctx.closePath();
+  }
+
+  drawCharacterTrail(ctx, c) {
+    if (!c || c.magFactor <= 0.15) return;
+    const trailLen = 32 * c.magFactor;
+    const trailGrad = ctx.createLinearGradient(c.x, c.y, c.x - trailLen, c.y);
+    trailGrad.addColorStop(0, `rgba(255, 213, 79, ${(0.45 * c.magFactor).toFixed(2)})`);
+    trailGrad.addColorStop(0.35, `rgba(255, 42, 59, ${(0.35 * c.magFactor).toFixed(2)})`);
+    trailGrad.addColorStop(1, 'rgba(255, 42, 59, 0)');
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(c.x, c.y - 1.5);
+    ctx.lineTo(c.x - trailLen, c.y);
+    ctx.lineTo(c.x, c.y + 1.5);
+    ctx.closePath();
+    ctx.fillStyle = trailGrad;
+    ctx.shadowColor = '#ffd54f';
+    ctx.shadowBlur = 8 * c.magFactor;
+    ctx.fill();
+    ctx.restore();
+  }
+
+  drawLiquidGlassTile(ctx, c) {
+    // Spaces or blank separators maintain rhythmic spacing without drawing empty boxes
+    if (!c.char || c.char.trim() === '') return;
+
+    const w = this.tileW;
+    const h = this.tileH;
+    const r = this.tileRadius;
+    const isMagnified = c.magFactor > 0.02;
+    const isPeakCenter = c.magFactor > 0.45;
+
+    // Slight forward floating 3D elevation (Z-elevation lift toward viewer)
+    const floatY = -3.5 * c.magFactor;
+
+    ctx.save();
+    ctx.globalAlpha = c.opacity;
+
+    // Translate to character position and scale from exact tile/character center
+    ctx.translate(c.x, c.y + floatY);
+    if (c.scale && c.scale !== 1.0) {
+      ctx.scale(c.scale, c.scale);
+    }
+
+    // 1. Ambient Drop Shadow for 3D elevation
+    if (isMagnified) {
+      ctx.save();
+      ctx.shadowColor = 'rgba(0, 0, 0, 0.75)';
+      ctx.shadowBlur = 12 * c.magFactor;
+      ctx.shadowOffsetY = 4 * c.magFactor;
+      this.roundRect(ctx, -w / 2, -h / 2, w, h, r);
+      ctx.fillStyle = 'rgba(10, 12, 16, 0.4)';
+      ctx.fill();
+      ctx.restore();
+    }
+
+    // 2. Liquid Glass Translucent Body
+    const glassGrad = ctx.createLinearGradient(0, -h / 2, 0, h / 2);
+    if (isMagnified) {
+      glassGrad.addColorStop(0, 'rgba(42, 48, 64, 0.88)');
+      glassGrad.addColorStop(0.4, 'rgba(20, 22, 32, 0.92)');
+      glassGrad.addColorStop(1, 'rgba(58, 14, 26, 0.95)');
+    } else {
+      glassGrad.addColorStop(0, 'rgba(28, 32, 42, 0.76)');
+      glassGrad.addColorStop(0.5, 'rgba(14, 16, 22, 0.84)');
+      glassGrad.addColorStop(1, 'rgba(26, 10, 16, 0.88)');
+    }
+    this.roundRect(ctx, -w / 2, -h / 2, w, h, r);
+    ctx.fillStyle = glassGrad;
+    ctx.fill();
+
+    // 3. Multi-directional Bevel Rim Stroke (Fine Reflective Borders)
+    const strokeGrad = ctx.createLinearGradient(-w / 2, -h / 2, w / 2, h / 2);
+    if (isMagnified) {
+      strokeGrad.addColorStop(0, `rgba(255, 255, 255, ${(0.7 + 0.3 * c.magFactor).toFixed(2)})`);
+      strokeGrad.addColorStop(0.3, `rgba(255, 200, 80, ${(0.6 + 0.3 * c.magFactor).toFixed(2)})`);
+      strokeGrad.addColorStop(0.7, `rgba(255, 42, 59, ${(0.8 + 0.2 * c.magFactor).toFixed(2)})`);
+      strokeGrad.addColorStop(1, 'rgba(255, 42, 59, 0.95)');
+      ctx.strokeStyle = strokeGrad;
+      ctx.lineWidth = 1.2;
+      ctx.shadowColor = `rgba(255, 42, 59, ${(0.6 * c.magFactor).toFixed(2)})`;
+      ctx.shadowBlur = 8 + 10 * c.magFactor;
+    } else {
+      strokeGrad.addColorStop(0, 'rgba(255, 255, 255, 0.35)');
+      strokeGrad.addColorStop(0.4, 'rgba(255, 42, 59, 0.25)');
+      strokeGrad.addColorStop(1, 'rgba(255, 42, 59, 0.45)');
+      ctx.strokeStyle = strokeGrad;
+      ctx.lineWidth = 0.9;
+      ctx.shadowColor = 'rgba(255, 42, 59, 0.2)';
+      ctx.shadowBlur = 4;
+    }
+    this.roundRect(ctx, -w / 2, -h / 2, w, h, r);
+    ctx.stroke();
+
+    // 4. Apple Liquid Glass Upper Specular Curved Reflection
+    ctx.save();
+    this.roundRect(ctx, -w / 2, -h / 2, w, h, r);
+    ctx.clip();
+
+    ctx.beginPath();
+    ctx.ellipse(0, -h * 0.45, w * 0.75, h * 0.32, 0, 0, Math.PI * 2);
+    const glossGrad = ctx.createLinearGradient(0, -h / 2, 0, 0);
+    const glossAlpha = isMagnified ? 0.45 + 0.25 * c.magFactor : 0.25;
+    glossGrad.addColorStop(0, `rgba(255, 255, 255, ${glossAlpha.toFixed(2)})`);
+    glossGrad.addColorStop(0.6, `rgba(255, 255, 255, ${(glossAlpha * 0.3).toFixed(2)})`);
+    glossGrad.addColorStop(1, 'rgba(255, 255, 255, 0)');
+    ctx.fillStyle = glossGrad;
+    ctx.fill();
+
+    // Subtle inner hairline highlight along top border
+    ctx.beginPath();
+    ctx.moveTo(-w / 2 + r, -h / 2 + 1);
+    ctx.lineTo(w / 2 - r, -h / 2 + 1);
+    ctx.strokeStyle = `rgba(255, 255, 255, ${isMagnified ? 0.75 : 0.4})`;
+    ctx.lineWidth = 0.75;
+    ctx.stroke();
+    ctx.restore();
+
+    // 5. Crisp, Centered Typography (High Contrast Against Laser)
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.font = '700 13px ui-monospace, SFMono-Regular, "JetBrains Mono", Menlo, Consolas, monospace';
+
+    if (isPeakCenter) {
+      // Brilliant laser white glyph with gold inner core corona
+      ctx.fillStyle = '#ffe082';
+      ctx.shadowColor = '#ffd54f';
+      ctx.shadowBlur = 12;
+      ctx.fillText(c.char, 0, 0);
+
+      ctx.fillStyle = '#ffffff';
+      ctx.shadowColor = '#ffffff';
+      ctx.shadowBlur = 8;
+      ctx.fillText(c.char, 0, 0);
+    } else if (isMagnified) {
+      // Transitioning: crisp white glyph with crimson edge glow
+      ctx.fillStyle = '#ffffff';
+      ctx.shadowColor = '#ff2a3b';
+      ctx.shadowBlur = 8 + 6 * c.magFactor;
+      ctx.fillText(c.char, 0, 0);
+    } else {
+      // Standard resting stream: crisp cyber monospace glyph
+      ctx.fillStyle = 'rgba(240, 244, 250, 0.95)';
+      ctx.shadowColor = 'rgba(255, 42, 59, 0.7)';
+      ctx.shadowBlur = 5;
+      ctx.fillText(c.char, 0, 0);
+    }
+
+    ctx.restore();
+  }
+
   drawHorizontalCharacters(ctx) {
     ctx.save();
 
+    // 1. Draw trailing energy residue for characters traversing focal beam
     for (const c of this.characters) {
+      if (c.opacity > 0.01 && c.magFactor > 0.15) {
+        this.drawCharacterTrail(ctx, c);
+      }
+    }
+
+    // 2. Sort by magnification factor ascending so the active magnified tile renders on top in 3D Z-order
+    const sorted = [...this.characters].sort((a, b) => (a.magFactor || 0) - (b.magFactor || 0));
+
+    // 3. Render Liquid Glass character tiles
+    for (const c of sorted) {
       if (c.opacity <= 0.01) continue;
-
-      ctx.save();
-      ctx.globalAlpha = c.opacity;
-
-      // Translate origin to character baseline position so scaling originates strictly from character's center
-      ctx.translate(c.x, c.y);
-      if (c.scale && c.scale !== 1.0) {
-        ctx.scale(c.scale, c.scale);
-      }
-
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.font = '700 17px ui-monospace, SFMono-Regular, "JetBrains Mono", Menlo, Consolas, monospace';
-
-      const isMagnified = c.magFactor > 0.02;
-      const isPeakCenter = c.magFactor > 0.45;
-
-      // Subtle optical magnification aura behind magnified character (coordinated with orb's crimson-gold energy)
-      if (isMagnified && c.char && c.char.trim() !== '') {
-        const auraRadius = 14 + 6 * c.magFactor;
-        const aura = ctx.createRadialGradient(0, 0, 0, 0, 0, auraRadius);
-        aura.addColorStop(0, `rgba(255, 255, 255, ${(0.32 * c.magFactor).toFixed(3)})`);
-        aura.addColorStop(0.35, `rgba(255, 42, 59, ${(0.42 * c.magFactor).toFixed(3)})`);
-        aura.addColorStop(0.75, `rgba(255, 213, 79, ${(0.18 * c.magFactor).toFixed(3)})`);
-        aura.addColorStop(1, 'rgba(255, 42, 59, 0)');
-        ctx.fillStyle = aura;
-        ctx.beginPath();
-        ctx.arc(0, 0, auraRadius, 0, Math.PI * 2);
-        ctx.fill();
-      }
-
-      if (isPeakCenter) {
-        // Center scanning laser focus: brilliant laser white with gold-crimson illumination
-        ctx.fillStyle = '#ffffff';
-        ctx.shadowColor = '#ffffff';
-        ctx.shadowBlur = 16 + 8 * c.magFactor;
-        ctx.fillText(c.char, 0, 0);
-
-        // Secondary laser corona glow in gold/amber
-        ctx.fillStyle = '#ffd54f';
-        ctx.shadowColor = '#ffd54f';
-        ctx.shadowBlur = 20 + 8 * c.magFactor;
-        ctx.fillText(c.char, 0, 0);
-      } else if (isMagnified) {
-        // Entering/exiting magnification: smooth crimson-gold scanning glow
-        ctx.fillStyle = '#ffffff';
-        ctx.shadowColor = '#ff2a3b';
-        ctx.shadowBlur = 12 + 8 * c.magFactor;
-        ctx.fillText(c.char, 0, 0);
-
-        ctx.fillStyle = 'rgba(255, 220, 225, 0.95)';
-        ctx.shadowColor = '#ffd54f';
-        ctx.shadowBlur = 10 * c.magFactor;
-        ctx.fillText(c.char, 0, 0);
-      } else {
-        // Standard horizontal stream: crisp, glowing cyber red monospace glyph (normal size 1.0x)
-        ctx.fillStyle = 'rgba(255, 220, 225, 0.95)';
-        ctx.shadowColor = 'rgba(255, 42, 59, 0.85)';
-        ctx.shadowBlur = 8;
-        ctx.fillText(c.char, 0, 0);
-      }
-
-      ctx.restore();
+      this.drawLiquidGlassTile(ctx, c);
     }
 
     ctx.restore();
