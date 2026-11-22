@@ -1045,21 +1045,22 @@ class OrbScanEngine {
 }
 
 // ============================================================================
-// SUBTLE CRIMSON SMOKE ENGINE (INITIALISE SCANNER BUTTON)
-// Matching Reference: Bottom-Right Panel "Final Look (Subtle & Premium)"
+// FLOWING CRIMSON FLAME-SMOKE ENGINE (INITIALISE SCANNER BUTTON)
+// Direct Recreation of Reference "Final Look (Subtle & Premium)"
 // Features:
-// - Soft, translucent red smoke-like formations flowing behind and around button
-// - Smooth, flowing, naturally curved shapes (NO flame spikes, grass, or wireframes)
-// - Deep crimson and dark red tones with subtle luminous scarlet highlights
-// - Gentle, slow upward and sideways organic movement
-// - Gradually fading transparency towards the outer edges
-// - Compact, restrained footprint: concentrated behind and slightly above the button
-// - Hardware-accelerated WebGL with 2D volumetric smoke fallback
+// - Broad, smooth, organic, translucent crimson smoke formations emerging from
+//   behind the button's upper edge
+// - Cubic Bézier fluid plumes with deep crimson interiors and glowing scarlet edges
+// - Zero pixel noise, zero grain, zero wireframe spikes, zero fuzzy halos
+// - Hypnotic, slow-motion organic billowing and curling movement
+// - Compact, proportionate reach (35px-58px above button top), never touching text
+// - Smooth transitions between Idle, Hover, and Click states
 // ============================================================================
 
 class HeroSmokeEngine {
   constructor(canvas, button) {
     this.canvas = canvas;
+    this.ctx = canvas.getContext('2d');
     this.button = button;
     this.overviewView = document.getElementById('view-overview');
 
@@ -1069,19 +1070,16 @@ class HeroSmokeEngine {
     this.animId = null;
 
     // Interaction states
-    this.intensity = 0.85;
-    this.targetIntensity = 0.85;
+    this.intensity = 0.9;
+    this.targetIntensity = 0.9;
     this.hover = 0.0;
     this.targetHover = 0.0;
     this.burst = 0.0;
     this.burstActive = false;
 
-    // Attempt WebGL first, fall back to 2D volumetric smoke
-    this.isWebGL = this.initWebGL();
-    if (!this.isWebGL) {
-      this.init2D();
-    }
-
+    this.initDimensions();
+    this.initPlumes();
+    this.initMotes();
     this.bindEvents();
     this.start();
   }
@@ -1090,15 +1088,12 @@ class HeroSmokeEngine {
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     this.dpr = dpr;
 
-    const bw = this.button.offsetWidth || 214;
-    const bh = this.button.offsetHeight || 42;
+    const bw = this.button.offsetWidth || 220;
+    const bh = this.button.offsetHeight || 44;
 
-    // Compact, proportionate bounding:
-    // 32px padding on left/right flanks to wrap rounded corners
-    // 44px above button for soft smoke plumes (well clear of the paragraph and heading)
-    // 12px below button for subtle warm bottom rim glow
-    this.padX = 32;
-    this.padTop = 44;
+    // Compact, proportionate canvas padding
+    this.padX = 35;
+    this.padTop = 65; // Headroom for smoke formations to rise above button
     this.padBottom = 12;
 
     this.width = bw + this.padX * 2;
@@ -1115,288 +1110,99 @@ class HeroSmokeEngine {
     this.btnW = bw;
     this.btnH = bh;
     this.btnX = this.padX;
-    this.btnY = this.padTop; // From top in 2D
-    this.glBtnY = this.padBottom; // From bottom in WebGL
+    this.btnY = this.padTop; // Top edge of button inside canvas coordinate space
   }
 
-  initWebGL() {
-    this.initDimensions();
-    const gl = this.canvas.getContext('webgl', {
-      alpha: true,
-      premultipliedAlpha: false,
-      antialias: false,
-      depth: false
-    }) || this.canvas.getContext('experimental-webgl');
-
-    if (!gl) return false;
-    this.gl = gl;
-
-    const vsSource = `
-      attribute vec2 a_position;
-      void main() {
-        gl_Position = vec4(a_position, 0.0, 1.0);
+  initPlumes() {
+    // 6 distinct flowing smoke formations (matching bottom-right reference panel)
+    this.plumes = [
+      // 1. Left corner curling plume (wraps around left curve)
+      {
+        relX: 0.10,
+        baseW: 30,
+        height: 38,
+        speed: 0.72,
+        phase: 0.4,
+        curlDir: -1,
+        isBack: false
+      },
+      // 2. Left-center broad billowing plume
+      {
+        relX: 0.30,
+        baseW: 46,
+        height: 50,
+        speed: 0.85,
+        phase: 1.8,
+        curlDir: 1,
+        isBack: false
+      },
+      // 3. Central tall elegant smoke plume
+      {
+        relX: 0.50,
+        baseW: 52,
+        height: 58,
+        speed: 0.65,
+        phase: 3.1,
+        curlDir: -1,
+        isBack: false
+      },
+      // 4. Right-center billowing plume
+      {
+        relX: 0.70,
+        baseW: 44,
+        height: 48,
+        speed: 0.90,
+        phase: 4.4,
+        curlDir: 1,
+        isBack: false
+      },
+      // 5. Right corner curling plume (wraps around right curve)
+      {
+        relX: 0.90,
+        baseW: 30,
+        height: 40,
+        speed: 0.76,
+        phase: 5.6,
+        curlDir: 1,
+        isBack: false
+      },
+      // 6. Deep background atmospheric veil (provides optical depth between plumes)
+      {
+        relX: 0.42,
+        baseW: 75,
+        height: 44,
+        speed: 0.52,
+        phase: 2.2,
+        curlDir: -1,
+        isBack: true
       }
-    `;
-
-    const fsSource = `
-      precision mediump float;
-      uniform vec2 u_resolution;
-      uniform float u_time;
-      uniform vec4 u_btn; // x, y, w, h in canvas pixels (origin bottom-left)
-      uniform float u_intensity;
-      uniform float u_hover;
-      uniform float u_burst;
-
-      vec3 mod289(vec3 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
-      vec2 mod289(vec2 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
-      vec3 permute(vec3 x) { return mod289(((x * 34.0) + 1.0) * x); }
-
-      float snoise(vec2 v) {
-        const vec4 C = vec4(0.211324865405187, 0.366025403784439, -0.577350269189626, 0.024390243902439);
-        vec2 i  = floor(v + dot(v, C.yy));
-        vec2 x0 = v - i + dot(i, C.xx);
-        vec2 i1 = (x0.x > x0.y) ? vec2(1.0, 0.0) : vec2(0.0, 1.0);
-        vec4 x12 = x0.xyxy + C.xxzz;
-        x12.xy -= i1;
-        i = mod289(i);
-        vec3 p = permute(permute(i.y + vec3(0.0, i1.y, 1.0)) + i.x + vec3(0.0, i1.x, 1.0));
-        vec3 m = max(0.5 - vec3(dot(x0, x0), dot(x12.xy, x12.xy), dot(x12.zw, x12.zw)), 0.0);
-        m = m * m;
-        m = m * m;
-        vec3 x = 2.0 * fract(p * C.www) - 1.0;
-        vec3 h = abs(x) - 0.5;
-        vec3 ox = floor(x + 0.5);
-        vec3 a0 = x - ox;
-        m *= 1.79284291400159 - 0.85373472095314 * (a0 * a0 + h * h);
-        vec3 g;
-        g.x  = a0.x  * x0.x  + h.x  * x0.y;
-        g.yz = a0.yz * x12.xz + h.yz * x12.yw;
-        return 130.0 * dot(m, g);
-      }
-
-      float smokeFbm(vec2 p) {
-        float v = 0.0;
-        float a = 0.52;
-        mat2 rot = mat2(0.866, 0.5, -0.5, 0.866);
-        for (int i = 0; i < 4; ++i) {
-          v += a * snoise(p);
-          p = rot * p * 2.05 + vec2(15.2, 11.4);
-          a *= 0.48;
-        }
-        return v;
-      }
-
-      float smokeTurbulence(vec2 p, float t) {
-        vec2 flow = vec2(sin(t * 0.38) * 0.16, -t * 0.42);
-        vec2 q = vec2(
-          smokeFbm(p + flow * 0.6),
-          smokeFbm(p + flow + vec2(3.7, 1.8))
-        );
-        vec2 r = vec2(
-          smokeFbm(p + 1.8 * q + flow * 0.8 + vec2(1.2, 6.4)),
-          smokeFbm(p + 1.8 * q + flow * 0.7 + vec2(6.8, 2.1))
-        );
-        return smokeFbm(p + 1.6 * r + flow * 0.9);
-      }
-
-      void main() {
-        vec2 pixel = gl_FragCoord.xy;
-        vec2 uv = pixel / u_resolution;
-        
-        float btnLeft = u_btn.x / u_resolution.x;
-        float btnRight = (u_btn.x + u_btn.z) / u_resolution.x;
-        float btnBottom = u_btn.y / u_resolution.y;
-        float btnTop = (u_btn.y + u_btn.w) / u_resolution.y;
-        float btnCenterX = (btnLeft + btnRight) * 0.5;
-        float btnHalfW = (btnRight - btnLeft) * 0.5;
-        
-        // Compact horizontal envelope
-        float dx = abs(uv.x - btnCenterX) / btnHalfW;
-        float hEnvelope = smoothstep(1.35, 0.88, dx);
-        
-        // Vertical envelope:
-        // Concentrated behind and slightly above the button (bottom-right panel reference)
-        float vDist = uv.y - btnTop;
-        float maxReach = (1.0 - btnTop);
-        
-        // Broad, gentle rolling smoke plumes
-        float plumeMod = 1.0 + 0.28 * sin(uv.x * 14.0 + u_time * 0.8) 
-                              + 0.18 * cos(uv.x * 22.0 - u_time * 1.1);
-        float reachNorm = clamp(vDist / (maxReach * plumeMod), 0.0, 1.0);
-        
-        float vEnvelope = 0.0;
-        if (uv.y >= btnTop) {
-          vEnvelope = smoothstep(1.0, 0.0, pow(reachNorm, 0.85));
-        } else if (uv.y >= btnBottom) {
-          vEnvelope = 0.75 + 0.25 * smoothstep(btnBottom, btnTop, uv.y);
-        } else {
-          float bDist = (btnBottom - uv.y) / btnBottom;
-          vEnvelope = smoothstep(1.0, 0.0, bDist) * 0.45;
-        }
-        
-        float envelope = hEnvelope * vEnvelope;
-        if (envelope <= 0.005) {
-          gl_FragColor = vec4(0.0);
-          return;
-        }
-        
-        // Evaluate silky smoke turbulence
-        vec2 noiseCoord = vec2(uv.x * 3.2, uv.y * 2.4);
-        float n = smokeTurbulence(noiseCoord, u_time * (0.55 + 0.25 * u_hover));
-        
-        float density = (n * 0.5 + 0.5) * envelope * (u_intensity + 0.35 * u_hover);
-        
-        if (u_burst > 0.0) {
-          float bWave = sin(u_burst * 3.14159);
-          density += bWave * 0.32 * envelope;
-        }
-        
-        if (density < 0.02) {
-          gl_FragColor = vec4(0.0);
-          return;
-        }
-        
-        // EXACT PALETTE FROM BOTTOM-RIGHT REFERENCE PANEL
-        vec3 colDarkWine = vec3(0.28, 0.015, 0.04);  // deep dark burgundy shadow
-        vec3 colBlood    = vec3(0.58, 0.04, 0.09);   // rich deep crimson smoke body
-        vec3 colCrimson  = vec3(0.85, 0.08, 0.16);   // luminous burning crimson
-        vec3 colScarlet  = vec3(0.98, 0.18, 0.25);   // bright scarlet smoke highlight
-        vec3 colCoral    = vec3(1.00, 0.45, 0.52);   // subtle edge sheen
-        
-        vec3 finalColor = mix(colDarkWine, colBlood, smoothstep(0.04, 0.25, density));
-        finalColor = mix(finalColor, colCrimson, smoothstep(0.25, 0.52, density));
-        finalColor = mix(finalColor, colScarlet, smoothstep(0.52, 0.78, density));
-        finalColor = mix(finalColor, colCoral, smoothstep(0.78, 1.05, density));
-        
-        float alpha = smoothstep(0.02, 0.38, density) * 0.78;
-        float aura = smoothstep(0.01, 0.16, density) * (1.0 - smoothstep(0.16, 0.42, density)) * 0.32;
-        alpha = clamp(alpha + aura, 0.0, 0.85);
-        
-        gl_FragColor = vec4(finalColor * alpha, alpha);
-      }
-    `;
-
-    function createShader(gl, type, source) {
-      const shader = gl.createShader(type);
-      gl.shaderSource(shader, source);
-      gl.compileShader(shader);
-      if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-        console.warn('Shader compile failed:', gl.getShaderInfoLog(shader));
-        gl.deleteShader(shader);
-        return null;
-      }
-      return shader;
-    }
-
-    const vs = createShader(gl, gl.VERTEX_SHADER, vsSource);
-    const fs = createShader(gl, gl.FRAGMENT_SHADER, fsSource);
-    if (!vs || !fs) return false;
-
-    const program = gl.createProgram();
-    gl.attachShader(program, vs);
-    gl.attachShader(program, fs);
-    gl.linkProgram(program);
-    if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
-      console.warn('Program link failed:', gl.getProgramInfoLog(program));
-      return false;
-    }
-
-    this.program = program;
-    gl.useProgram(program);
-
-    const positionBuffer = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
-    gl.bufferData(
-      gl.ARRAY_BUFFER,
-      new Float32Array([-1, -1, 1, -1, -1, 1, -1, 1, 1, -1, 1, 1]),
-      gl.STATIC_DRAW
-    );
-
-    const posAttr = gl.getAttribLocation(program, 'a_position');
-    gl.enableVertexAttribArray(posAttr);
-    gl.vertexAttribPointer(posAttr, 2, gl.FLOAT, false, 0, 0);
-
-    this.uResolution = gl.getUniformLocation(program, 'u_resolution');
-    this.uTime = gl.getUniformLocation(program, 'u_time');
-    this.uBtn = gl.getUniformLocation(program, 'u_btn');
-    this.uIntensity = gl.getUniformLocation(program, 'u_intensity');
-    this.uHover = gl.getUniformLocation(program, 'u_hover');
-    this.uBurst = gl.getUniformLocation(program, 'u_burst');
-
-    gl.enable(gl.BLEND);
-    gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
-
-    return true;
+    ];
   }
 
-  init2D() {
-    this.initDimensions();
-    this.ctx = this.canvas.getContext('2d');
-    
-    // Broad, smooth volumetric smoke clouds for 2D fallback
-    this.smokePuffs = [];
-    const count = 6;
-    for (let i = 0; i < count; i++) {
-      this.smokePuffs.push({
-        relX: 0.12 + (i / (count - 1)) * 0.76,
-        baseR: 35 + (i % 3) * 8,
-        heightOffset: 20 + (i % 3) * 6,
-        phase: (i * 1.4) % (Math.PI * 2),
-        speed: 0.6 + (i % 3) * 0.2
+  initMotes() {
+    this.motes = [];
+    for (let i = 0; i < 7; i++) {
+      this.motes.push({
+        x: this.btnX + (0.15 + Math.random() * 0.7) * this.btnW,
+        y: this.btnY - 10 - Math.random() * 25,
+        vy: 16 + Math.random() * 20,
+        size: 1.0 + Math.random() * 1.4,
+        life: Math.random(),
+        maxLife: 1.6 + Math.random() * 1.2,
+        phase: Math.random() * Math.PI * 2
       });
     }
-  }
-
-  draw2DFallback(dt) {
-    const ctx = this.ctx;
-    ctx.save();
-    ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
-    ctx.clearRect(0, 0, this.width, this.height);
-
-    ctx.globalCompositeOperation = 'screen';
-    
-    // Soft atmospheric red halo behind button
-    const halo = ctx.createRadialGradient(
-      this.btnX + this.btnW / 2, this.btnY + 4, 10,
-      this.btnX + this.btnW / 2, this.btnY + 4, this.btnW / 2 + 30
-    );
-    halo.addColorStop(0.0, `rgba(200, 20, 35, ${0.30 * this.intensity})`);
-    halo.addColorStop(0.55, `rgba(130, 10, 20, ${0.12 * this.intensity})`);
-    halo.addColorStop(1.0, 'rgba(0, 0, 0, 0)');
-    ctx.fillStyle = halo;
-    ctx.fillRect(0, 0, this.width, this.height);
-
-    // Soft volumetric smoke puffs (NO lines or spikes)
-    const t = this.time;
-    for (const p of this.smokePuffs) {
-      const cx = this.btnX + p.relX * this.btnW + Math.sin(t * p.speed + p.phase) * 8;
-      const cy = this.btnY - p.heightOffset + Math.cos(t * p.speed * 0.8) * 4;
-      const r = p.baseR * (0.9 + 0.2 * this.hover);
-
-      const grad = ctx.createRadialGradient(cx, cy, 2, cx, cy, r);
-      grad.addColorStop(0.0, `rgba(185, 16, 30, ${0.55 * this.intensity})`);
-      grad.addColorStop(0.45, `rgba(135, 12, 22, ${0.35 * this.intensity})`);
-      grad.addColorStop(0.80, `rgba(75, 6, 12, ${0.12 * this.intensity})`);
-      grad.addColorStop(1.0, 'rgba(30, 2, 5, 0)');
-
-      ctx.beginPath();
-      ctx.arc(cx, cy, r, 0, Math.PI * 2);
-      ctx.fillStyle = grad;
-      ctx.fill();
-    }
-
-    ctx.restore();
   }
 
   bindEvents() {
     this.button.addEventListener('mouseenter', () => {
       this.targetHover = 1.0;
-      this.targetIntensity = 1.2;
+      this.targetIntensity = 1.25;
     });
 
     this.button.addEventListener('mouseleave', () => {
       this.targetHover = 0.0;
-      this.targetIntensity = 0.85;
+      this.targetIntensity = 0.9;
     });
 
     this.button.addEventListener('mousedown', () => {
@@ -1414,31 +1220,167 @@ class HeroSmokeEngine {
     this.intensity = 1.45;
   }
 
-  renderWebGL(dt) {
-    const gl = this.gl;
-    const cw = Math.round(this.width * this.dpr);
-    const ch = Math.round(this.height * this.dpr);
+  drawPlume(ctx, p, t, intensity, hover) {
+    const cx = this.btnX + p.relX * this.btnW;
+    const cy = this.btnY;
 
-    gl.viewport(0, 0, cw, ch);
-    gl.clearColor(0.0, 0.0, 0.0, 0.0);
-    gl.clear(gl.COLOR_BUFFER_BIT);
+    // Organic breathing height and width
+    const breathH = Math.sin(t * p.speed * 0.9 + p.phase);
+    const breathW = Math.cos(t * p.speed * 0.7 + p.phase);
+    const currentH = p.height * (1.0 + 0.16 * breathH) * (1.0 + 0.15 * hover);
+    const currentW = p.baseW * (1.0 + 0.12 * breathW);
 
-    gl.useProgram(this.program);
+    // Lateral wave sways for silky smoke curling
+    const sway1 = Math.sin(t * p.speed * 1.1 + p.phase) * (currentW * 0.28);
+    const sway2 = Math.cos(t * p.speed * 1.4 + p.phase * 1.3) * (currentW * 0.35);
+    const tipSway = Math.sin(t * p.speed * 0.8 + p.phase * 0.7) * (currentW * 0.45);
 
-    gl.uniform2f(this.uResolution, cw, ch);
-    gl.uniform1f(this.uTime, this.time);
-    gl.uniform4f(
-      this.uBtn,
-      this.btnX * this.dpr,
-      this.glBtnY * this.dpr,
-      this.btnW * this.dpr,
-      this.btnH * this.dpr
-    );
-    gl.uniform1f(this.uIntensity, this.intensity);
-    gl.uniform1f(this.uHover, this.hover);
-    gl.uniform1f(this.uBurst, this.burst);
+    // Anchors behind button rim
+    const xLeft = cx - currentW * 0.5;
+    const xRight = cx + currentW * 0.5;
+    const yBase = cy + 4;
 
-    gl.drawArrays(gl.TRIANGLES, 0, 6);
+    // Plume tip
+    const xTip = cx + tipSway;
+    const yTip = cy - currentH;
+
+    // Control points for left boundary
+    const cp1Lx = xLeft + sway1 * 0.6;
+    const cp1Ly = cy - currentH * 0.35;
+    const cp2Lx = cx - currentW * 0.25 + sway2;
+    const cp2Ly = cy - currentH * 0.75;
+
+    // Control points for right boundary
+    const cp2Rx = cx + currentW * 0.25 + sway2;
+    const cp2Ry = cy - currentH * 0.75;
+    const cp1Rx = xRight + sway1 * 0.6;
+    const cp1Ry = cy - currentH * 0.35;
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(xLeft, yBase);
+    ctx.bezierCurveTo(cp1Lx, cp1Ly, cp2Lx, cp2Ly, xTip, yTip);
+    ctx.bezierCurveTo(cp2Rx, cp2Ry, cp1Rx, cp1Ry, xRight, yBase);
+    ctx.closePath();
+
+    // Smooth gradient fill: translucent deep crimson interior
+    const bodyGrad = ctx.createLinearGradient(cx, yBase, xTip, yTip);
+    const baseAlpha = (p.isBack ? 0.32 : 0.65) * intensity;
+
+    bodyGrad.addColorStop(0.0, `rgba(165, 12, 22, ${0.75 * baseAlpha})`);
+    bodyGrad.addColorStop(0.35, `rgba(215, 20, 36, ${0.60 * baseAlpha})`);
+    bodyGrad.addColorStop(0.70, `rgba(130, 8, 16, ${0.30 * baseAlpha})`);
+    bodyGrad.addColorStop(1.0, 'rgba(40, 2, 5, 0.0)');
+
+    ctx.fillStyle = bodyGrad;
+    ctx.fill();
+
+    // Luminous scarlet edge highlights along the flowing contours
+    if (!p.isBack) {
+      const edgeGrad = ctx.createLinearGradient(cx, yBase, xTip, yTip);
+      const edgeAlpha = (0.75 + 0.3 * hover) * intensity;
+
+      edgeGrad.addColorStop(0.0, `rgba(220, 25, 40, ${0.35 * edgeAlpha})`);
+      edgeGrad.addColorStop(0.35, `rgba(255, 55, 75, ${0.85 * edgeAlpha})`);
+      edgeGrad.addColorStop(0.65, `rgba(255, 115, 135, ${0.80 * edgeAlpha})`);
+      edgeGrad.addColorStop(0.88, `rgba(255, 45, 65, ${0.30 * edgeAlpha})`);
+      edgeGrad.addColorStop(1.0, 'rgba(200, 20, 30, 0.0)');
+
+      ctx.strokeStyle = edgeGrad;
+      ctx.lineWidth = 1.8;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      ctx.shadowColor = '#ff2a3b';
+      ctx.shadowBlur = 8;
+
+      ctx.beginPath();
+      ctx.moveTo(xLeft, yBase);
+      ctx.bezierCurveTo(cp1Lx, cp1Ly, cp2Lx, cp2Ly, xTip, yTip);
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.moveTo(xTip, yTip);
+      ctx.bezierCurveTo(cp2Rx, cp2Ry, cp1Rx, cp1Ry, xRight, yBase);
+      ctx.stroke();
+    }
+
+    ctx.restore();
+  }
+
+  drawAtmosphericAura(ctx, intensity) {
+    const cx = this.btnX + this.btnW / 2;
+    const cy = this.btnY + 6;
+    const radius = (this.btnW / 2 + 35) * (0.9 + 0.15 * this.hover);
+
+    const aura = ctx.createRadialGradient(cx, cy, 10, cx, cy, radius);
+    aura.addColorStop(0.0, `rgba(210, 18, 32, ${0.25 * intensity})`);
+    aura.addColorStop(0.5, `rgba(130, 10, 20, ${0.10 * intensity})`);
+    aura.addColorStop(1.0, 'rgba(0, 0, 0, 0)');
+
+    ctx.save();
+    ctx.fillStyle = aura;
+    ctx.fillRect(0, 0, this.width, this.height);
+    ctx.restore();
+  }
+
+  drawSmokeMotes(ctx, dt, intensity) {
+    ctx.save();
+    for (const m of this.motes) {
+      m.life += dt / m.maxLife;
+      if (m.life >= 1.0) {
+        m.life = 0;
+        m.x = this.btnX + (0.15 + Math.random() * 0.7) * this.btnW;
+        m.y = this.btnY - 10 - Math.random() * 20;
+        m.vy = 16 + Math.random() * 20;
+        m.size = 1.0 + Math.random() * 1.4;
+      }
+
+      m.y -= m.vy * dt;
+      m.x += Math.sin(this.time * 1.8 + m.phase) * 8 * dt;
+
+      const alpha = Math.sin(m.life * Math.PI) * 0.45 * intensity;
+      if (alpha <= 0.01) continue;
+
+      ctx.beginPath();
+      ctx.arc(m.x, m.y, m.size, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(255, 65, 85, ${alpha})`;
+      ctx.shadowColor = '#ff2a3b';
+      ctx.shadowBlur = 6;
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  draw(dt) {
+    const ctx = this.ctx;
+    ctx.save();
+    ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+    ctx.clearRect(0, 0, this.width, this.height);
+
+    // 1. Soft atmospheric red aura behind the button
+    this.drawAtmosphericAura(ctx, this.intensity);
+
+    // 2. Additive layer for smoke formations
+    ctx.globalCompositeOperation = 'screen';
+
+    // Draw background plume first for depth
+    for (const p of this.plumes) {
+      if (p.isBack) {
+        this.drawPlume(ctx, p, this.time, this.intensity, this.hover);
+      }
+    }
+
+    // Draw primary flowing smoke plumes
+    for (const p of this.plumes) {
+      if (!p.isBack) {
+        this.drawPlume(ctx, p, this.time, this.intensity, this.hover);
+      }
+    }
+
+    // 3. Subtle floating smoke motes
+    this.drawSmokeMotes(ctx, dt, this.intensity);
+
+    ctx.restore();
   }
 
   tick(now) {
@@ -1454,11 +1396,11 @@ class HeroSmokeEngine {
     this.time += dt;
 
     // Smooth lerp to target states
-    const lerpFactor = 1 - Math.exp(-dt * 5.5);
+    const lerpFactor = 1 - Math.exp(-dt * 6.0);
     this.intensity += (this.targetIntensity - this.intensity) * lerpFactor;
     this.hover += (this.targetHover - this.hover) * lerpFactor;
 
-    // Click burst decay
+    // Click pulse
     if (this.burstActive) {
       this.burst += dt / 0.35;
       if (this.burst >= 1.0) {
@@ -1467,12 +1409,7 @@ class HeroSmokeEngine {
       }
     }
 
-    if (this.isWebGL) {
-      this.renderWebGL(dt);
-    } else {
-      this.draw2DFallback(dt);
-    }
-
+    this.draw(dt);
     this.animId = requestAnimationFrame(t => this.tick(t));
   }
 

@@ -445,7 +445,7 @@ body {
 .hero-smoke-canvas,
 .hero-flame-canvas {
   position: absolute;
-  bottom: -10px;
+  bottom: -12px;
   left: 50%;
   transform: translateX(-50%);
   pointer-events: none;
