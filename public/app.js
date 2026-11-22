@@ -6,6 +6,7 @@ let records = loadRecords();
 let health = { configured: {} };
 let toastTimer;
 let heroFlameEngine = null;
+let heroSmokeEngine = null;
 
 function loadRecords() {
   try {
@@ -80,7 +81,13 @@ function showView(name) {
   $('#crumb').textContent = (name || 'OVERVIEW').toUpperCase();
   if (name === 'history') renderHistory();
   if (name === 'sources') renderSources();
-  if (heroFlameEngine) {
+  if (heroSmokeEngine) {
+    if (name === 'overview') {
+      heroSmokeEngine.resume();
+    } else {
+      heroSmokeEngine.pause();
+    }
+  } else if (heroFlameEngine) {
     if (name === 'overview') {
       heroFlameEngine.resume();
     } else {
@@ -1038,18 +1045,19 @@ class OrbScanEngine {
 }
 
 // ============================================================================
-// REALISTIC FLOWING CRIMSON FIRE ENGINE (INITIALISE SCANNER BUTTON)
-// Inspired directly by reference media_1795381748191_031f8c33.jpg
+// SUBTLE CRIMSON SMOKE ENGINE (INITIALISE SCANNER BUTTON)
+// Matching Reference: Bottom-Right Panel "Final Look (Subtle & Premium)"
 // Features:
-// - Broad, organic, flowing, translucent crimson flame bodies (NO wireframe spikes or grass outlines)
-// - Domain-warped fluid convection shader with velvety blood-red and crimson interiors
-// - Bright scarlet, ruby, and occasional white-hot luminous edge highlights
-// - Strictly bounded and compact footprint: hugs the button, licks ~25-35px above top edge
-//   without extending across the hero heading or description
-// - Hardware-accelerated WebGL with automatic 2D volumetric fire fallback
+// - Soft, translucent red smoke-like formations flowing behind and around button
+// - Smooth, flowing, naturally curved shapes (NO flame spikes, grass, or wireframes)
+// - Deep crimson and dark red tones with subtle luminous scarlet highlights
+// - Gentle, slow upward and sideways organic movement
+// - Gradually fading transparency towards the outer edges
+// - Compact, restrained footprint: concentrated behind and slightly above the button
+// - Hardware-accelerated WebGL with 2D volumetric smoke fallback
 // ============================================================================
 
-class HeroFlameEngine {
+class HeroSmokeEngine {
   constructor(canvas, button) {
     this.canvas = canvas;
     this.button = button;
@@ -1061,14 +1069,14 @@ class HeroFlameEngine {
     this.animId = null;
 
     // Interaction states
-    this.intensity = 0.88;
-    this.targetIntensity = 0.88;
+    this.intensity = 0.85;
+    this.targetIntensity = 0.85;
     this.hover = 0.0;
     this.targetHover = 0.0;
     this.burst = 0.0;
     this.burstActive = false;
 
-    // Attempt WebGL first, fall back to 2D volumetric fire
+    // Attempt WebGL first, fall back to 2D volumetric smoke
     this.isWebGL = this.initWebGL();
     if (!this.isWebGL) {
       this.init2D();
@@ -1086,12 +1094,12 @@ class HeroFlameEngine {
     const bh = this.button.offsetHeight || 42;
 
     // Compact, proportionate bounding:
-    // 28px padding on left/right flanks to wrap rounded corners
-    // 38px above button for compact flame lick (well clear of the paragraph and heading)
-    // 10px below button for subtle warm bottom rim glow
-    this.padX = 28;
-    this.padTop = 38;
-    this.padBottom = 10;
+    // 32px padding on left/right flanks to wrap rounded corners
+    // 44px above button for soft smoke plumes (well clear of the paragraph and heading)
+    // 12px below button for subtle warm bottom rim glow
+    this.padX = 32;
+    this.padTop = 44;
+    this.padBottom = 12;
 
     this.width = bw + this.padX * 2;
     this.height = bh + this.padTop + this.padBottom;
@@ -1166,29 +1174,29 @@ class HeroFlameEngine {
         return 130.0 * dot(m, g);
       }
 
-      float fbm(vec2 p) {
+      float smokeFbm(vec2 p) {
         float v = 0.0;
-        float a = 0.5;
-        mat2 rot = mat2(0.87758, 0.47942, -0.47942, 0.87758);
+        float a = 0.52;
+        mat2 rot = mat2(0.866, 0.5, -0.5, 0.866);
         for (int i = 0; i < 4; ++i) {
           v += a * snoise(p);
-          p = rot * p * 2.0 + vec2(10.0, 10.0);
-          a *= 0.5;
+          p = rot * p * 2.05 + vec2(15.2, 11.4);
+          a *= 0.48;
         }
         return v;
       }
 
-      float flameTurbulence(vec2 p, float t) {
-        vec2 flow = vec2(0.0, -t * 1.6);
+      float smokeTurbulence(vec2 p, float t) {
+        vec2 flow = vec2(sin(t * 0.38) * 0.16, -t * 0.42);
         vec2 q = vec2(
-          fbm(p + flow * 0.7),
-          fbm(p + flow + vec2(4.1, 2.7))
+          smokeFbm(p + flow * 0.6),
+          smokeFbm(p + flow + vec2(3.7, 1.8))
         );
         vec2 r = vec2(
-          fbm(p + 2.2 * q + flow * 1.1 + vec2(1.7, 8.4)),
-          fbm(p + 2.2 * q + flow * 0.9 + vec2(8.3, 3.2))
+          smokeFbm(p + 1.8 * q + flow * 0.8 + vec2(1.2, 6.4)),
+          smokeFbm(p + 1.8 * q + flow * 0.7 + vec2(6.8, 2.1))
         );
-        return fbm(p + 2.0 * r + flow * 1.4);
+        return smokeFbm(p + 1.6 * r + flow * 0.9);
       }
 
       void main() {
@@ -1202,27 +1210,28 @@ class HeroFlameEngine {
         float btnCenterX = (btnLeft + btnRight) * 0.5;
         float btnHalfW = (btnRight - btnLeft) * 0.5;
         
-        // Horizontal envelope: tightly hugging button with soft flank feathering
+        // Compact horizontal envelope
         float dx = abs(uv.x - btnCenterX) / btnHalfW;
-        float hEnvelope = smoothstep(1.30, 0.92, dx);
+        float hEnvelope = smoothstep(1.35, 0.88, dx);
         
         // Vertical envelope:
+        // Concentrated behind and slightly above the button (bottom-right panel reference)
         float vDist = uv.y - btnTop;
         float maxReach = (1.0 - btnTop);
         
-        // Undulating tongues across top edge
-        float tongueMod = 1.0 + 0.35 * sin(uv.x * 24.0 + u_time * 1.8) 
-                              + 0.22 * cos(uv.x * 38.0 - u_time * 2.4);
-        float reachNorm = clamp(vDist / (maxReach * tongueMod), 0.0, 1.0);
+        // Broad, gentle rolling smoke plumes
+        float plumeMod = 1.0 + 0.28 * sin(uv.x * 14.0 + u_time * 0.8) 
+                              + 0.18 * cos(uv.x * 22.0 - u_time * 1.1);
+        float reachNorm = clamp(vDist / (maxReach * plumeMod), 0.0, 1.0);
         
         float vEnvelope = 0.0;
         if (uv.y >= btnTop) {
-          vEnvelope = smoothstep(1.0, 0.0, pow(reachNorm, 0.82));
+          vEnvelope = smoothstep(1.0, 0.0, pow(reachNorm, 0.85));
         } else if (uv.y >= btnBottom) {
-          vEnvelope = 0.85 + 0.15 * smoothstep(btnBottom, btnTop, uv.y);
+          vEnvelope = 0.75 + 0.25 * smoothstep(btnBottom, btnTop, uv.y);
         } else {
           float bDist = (btnBottom - uv.y) / btnBottom;
-          vEnvelope = smoothstep(1.0, 0.0, bDist) * 0.6;
+          vEnvelope = smoothstep(1.0, 0.0, bDist) * 0.45;
         }
         
         float envelope = hEnvelope * vEnvelope;
@@ -1231,39 +1240,37 @@ class HeroFlameEngine {
           return;
         }
         
-        // Evaluate domain-warped fluid noise
-        vec2 noiseCoord = vec2(uv.x * 4.5, uv.y * 3.2);
-        float n = flameTurbulence(noiseCoord, u_time * (0.9 + 0.35 * u_hover));
+        // Evaluate silky smoke turbulence
+        vec2 noiseCoord = vec2(uv.x * 3.2, uv.y * 2.4);
+        float n = smokeTurbulence(noiseCoord, u_time * (0.55 + 0.25 * u_hover));
         
-        float density = (n * 0.5 + 0.5) * envelope * (u_intensity + 0.4 * u_hover);
+        float density = (n * 0.5 + 0.5) * envelope * (u_intensity + 0.35 * u_hover);
         
         if (u_burst > 0.0) {
           float bWave = sin(u_burst * 3.14159);
-          density += bWave * 0.45 * envelope;
+          density += bWave * 0.32 * envelope;
         }
         
-        if (density < 0.03) {
+        if (density < 0.02) {
           gl_FragColor = vec4(0.0);
           return;
         }
         
-        // EXACT COLOR PALETTE FROM REFERENCE IMAGE
-        vec3 colDarkWine = vec3(0.32, 0.02, 0.05);   // deep dark burgundy interior
-        vec3 colBloodRed = vec3(0.68, 0.06, 0.12);   // deep blood-red body
-        vec3 colCrimson  = vec3(0.95, 0.10, 0.18);   // vibrant burning crimson
-        vec3 colScarlet  = vec3(1.00, 0.22, 0.28);   // bright glowing scarlet
-        vec3 colCoral    = vec3(1.00, 0.58, 0.65);   // luminous coral-pink edge highlights
-        vec3 colWhiteHot = vec3(1.00, 0.94, 0.96);   // occasional white-hot crest
+        // EXACT PALETTE FROM BOTTOM-RIGHT REFERENCE PANEL
+        vec3 colDarkWine = vec3(0.28, 0.015, 0.04);  // deep dark burgundy shadow
+        vec3 colBlood    = vec3(0.58, 0.04, 0.09);   // rich deep crimson smoke body
+        vec3 colCrimson  = vec3(0.85, 0.08, 0.16);   // luminous burning crimson
+        vec3 colScarlet  = vec3(0.98, 0.18, 0.25);   // bright scarlet smoke highlight
+        vec3 colCoral    = vec3(1.00, 0.45, 0.52);   // subtle edge sheen
         
-        vec3 finalColor = mix(colDarkWine, colBloodRed, smoothstep(0.06, 0.28, density));
-        finalColor = mix(finalColor, colCrimson, smoothstep(0.28, 0.54, density));
-        finalColor = mix(finalColor, colScarlet, smoothstep(0.54, 0.76, density));
-        finalColor = mix(finalColor, colCoral, smoothstep(0.76, 0.90, density));
-        finalColor = mix(finalColor, colWhiteHot, smoothstep(0.90, 1.08, density));
+        vec3 finalColor = mix(colDarkWine, colBlood, smoothstep(0.04, 0.25, density));
+        finalColor = mix(finalColor, colCrimson, smoothstep(0.25, 0.52, density));
+        finalColor = mix(finalColor, colScarlet, smoothstep(0.52, 0.78, density));
+        finalColor = mix(finalColor, colCoral, smoothstep(0.78, 1.05, density));
         
-        float alpha = smoothstep(0.03, 0.35, density) * 0.88;
-        float outerGlow = smoothstep(0.01, 0.18, density) * (1.0 - smoothstep(0.18, 0.45, density)) * 0.35;
-        alpha = clamp(alpha + outerGlow, 0.0, 0.92);
+        float alpha = smoothstep(0.02, 0.38, density) * 0.78;
+        float aura = smoothstep(0.01, 0.16, density) * (1.0 - smoothstep(0.16, 0.42, density)) * 0.32;
+        alpha = clamp(alpha + aura, 0.0, 0.85);
         
         gl_FragColor = vec4(finalColor * alpha, alpha);
       }
@@ -1297,7 +1304,6 @@ class HeroFlameEngine {
     this.program = program;
     gl.useProgram(program);
 
-    // Full screen quad buffer
     const positionBuffer = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
     gl.bufferData(
@@ -1310,7 +1316,6 @@ class HeroFlameEngine {
     gl.enableVertexAttribArray(posAttr);
     gl.vertexAttribPointer(posAttr, 2, gl.FLOAT, false, 0, 0);
 
-    // Uniform locations
     this.uResolution = gl.getUniformLocation(program, 'u_resolution');
     this.uTime = gl.getUniformLocation(program, 'u_time');
     this.uBtn = gl.getUniformLocation(program, 'u_btn');
@@ -1328,16 +1333,16 @@ class HeroFlameEngine {
     this.initDimensions();
     this.ctx = this.canvas.getContext('2d');
     
-    // Broad, smooth volumetric flame plumes for 2D fallback
-    this.flames2D = [];
-    const count = 7;
+    // Broad, smooth volumetric smoke clouds for 2D fallback
+    this.smokePuffs = [];
+    const count = 6;
     for (let i = 0; i < count; i++) {
-      this.flames2D.push({
-        relX: 0.08 + (i / (count - 1)) * 0.84,
-        baseW: 32 + (i % 3) * 8,
-        height: 24 + (i % 4) * 6,
-        phase: (i * 1.2) % (Math.PI * 2),
-        speed: 1.2 + (i % 3) * 0.3
+      this.smokePuffs.push({
+        relX: 0.12 + (i / (count - 1)) * 0.76,
+        baseR: 35 + (i % 3) * 8,
+        heightOffset: 20 + (i % 3) * 6,
+        phase: (i * 1.4) % (Math.PI * 2),
+        speed: 0.6 + (i % 3) * 0.2
       });
     }
   }
@@ -1350,37 +1355,32 @@ class HeroFlameEngine {
 
     ctx.globalCompositeOperation = 'screen';
     
-    // Warm atmospheric red halo behind button
+    // Soft atmospheric red halo behind button
     const halo = ctx.createRadialGradient(
-      this.btnX + this.btnW / 2, this.btnY + 6, 8,
-      this.btnX + this.btnW / 2, this.btnY + 6, this.btnW / 2 + 25
+      this.btnX + this.btnW / 2, this.btnY + 4, 10,
+      this.btnX + this.btnW / 2, this.btnY + 4, this.btnW / 2 + 30
     );
-    halo.addColorStop(0.0, `rgba(220, 24, 40, ${0.35 * this.intensity})`);
-    halo.addColorStop(0.5, `rgba(160, 14, 28, ${0.15 * this.intensity})`);
+    halo.addColorStop(0.0, `rgba(200, 20, 35, ${0.30 * this.intensity})`);
+    halo.addColorStop(0.55, `rgba(130, 10, 20, ${0.12 * this.intensity})`);
     halo.addColorStop(1.0, 'rgba(0, 0, 0, 0)');
     ctx.fillStyle = halo;
     ctx.fillRect(0, 0, this.width, this.height);
 
-    // Broad volumetric flame tongues (NO wireframe lines)
+    // Soft volumetric smoke puffs (NO lines or spikes)
     const t = this.time;
-    for (const f of this.flames2D) {
-      const cx = this.btnX + f.relX * this.btnW;
-      const cy = this.btnY;
-      const sway = Math.sin(t * f.speed + f.phase) * 6;
-      const h = f.height * (0.85 + 0.35 * this.hover);
-      const w = f.baseW * (0.9 + 0.2 * this.hover);
+    for (const p of this.smokePuffs) {
+      const cx = this.btnX + p.relX * this.btnW + Math.sin(t * p.speed + p.phase) * 8;
+      const cy = this.btnY - p.heightOffset + Math.cos(t * p.speed * 0.8) * 4;
+      const r = p.baseR * (0.9 + 0.2 * this.hover);
 
-      const grad = ctx.createLinearGradient(cx, cy, cx + sway, cy - h);
-      grad.addColorStop(0.0, `rgba(195, 18, 36, ${0.65 * this.intensity})`);
-      grad.addColorStop(0.4, `rgba(245, 28, 52, ${0.55 * this.intensity})`);
-      grad.addColorStop(0.8, `rgba(255, 65, 85, ${0.30 * this.intensity})`);
-      grad.addColorStop(1.0, 'rgba(120, 10, 22, 0)');
+      const grad = ctx.createRadialGradient(cx, cy, 2, cx, cy, r);
+      grad.addColorStop(0.0, `rgba(185, 16, 30, ${0.55 * this.intensity})`);
+      grad.addColorStop(0.45, `rgba(135, 12, 22, ${0.35 * this.intensity})`);
+      grad.addColorStop(0.80, `rgba(75, 6, 12, ${0.12 * this.intensity})`);
+      grad.addColorStop(1.0, 'rgba(30, 2, 5, 0)');
 
       ctx.beginPath();
-      ctx.moveTo(cx - w / 2, cy + 4);
-      ctx.quadraticCurveTo(cx - w / 3, cy - h * 0.5, cx + sway, cy - h);
-      ctx.quadraticCurveTo(cx + w / 3, cy - h * 0.5, cx + w / 2, cy + 4);
-      ctx.closePath();
+      ctx.arc(cx, cy, r, 0, Math.PI * 2);
       ctx.fillStyle = grad;
       ctx.fill();
     }
@@ -1391,12 +1391,12 @@ class HeroFlameEngine {
   bindEvents() {
     this.button.addEventListener('mouseenter', () => {
       this.targetHover = 1.0;
-      this.targetIntensity = 1.25;
+      this.targetIntensity = 1.2;
     });
 
     this.button.addEventListener('mouseleave', () => {
       this.targetHover = 0.0;
-      this.targetIntensity = 0.88;
+      this.targetIntensity = 0.85;
     });
 
     this.button.addEventListener('mousedown', () => {
@@ -1411,7 +1411,7 @@ class HeroFlameEngine {
   triggerClickBurst() {
     this.burstActive = true;
     this.burst = 0.01;
-    this.intensity = 1.6;
+    this.intensity = 1.45;
   }
 
   renderWebGL(dt) {
@@ -1454,7 +1454,7 @@ class HeroFlameEngine {
     this.time += dt;
 
     // Smooth lerp to target states
-    const lerpFactor = 1 - Math.exp(-dt * 6.5);
+    const lerpFactor = 1 - Math.exp(-dt * 5.5);
     this.intensity += (this.targetIntensity - this.intensity) * lerpFactor;
     this.hover += (this.targetHover - this.hover) * lerpFactor;
 
@@ -1495,6 +1495,8 @@ class HeroFlameEngine {
     }
   }
 }
+
+class HeroFlameEngine extends HeroSmokeEngine {}
 
 class TimelineStageController {
   constructor() {
@@ -3312,10 +3314,11 @@ async function requestScan(raw) {
   }
 }
 
-// Initialize Hero Button Flame Energy Effect
-const heroFlameCanvas = document.getElementById('hero-flame-canvas');
+// Initialize Hero Button Subtle Crimson Smoke Effect (Matching Bottom-Right Reference)
+const heroSmokeCanvas = document.getElementById('hero-smoke-canvas') || document.getElementById('hero-flame-canvas');
 const heroPrimaryBtn = document.querySelector('.hero-btn-container .primary-btn') || document.querySelector('#view-overview .primary-btn[data-go="scanner"]');
 
-if (heroFlameCanvas && heroPrimaryBtn) {
-  heroFlameEngine = new HeroFlameEngine(heroFlameCanvas, heroPrimaryBtn);
+if (heroSmokeCanvas && heroPrimaryBtn) {
+  heroSmokeEngine = new HeroSmokeEngine(heroSmokeCanvas, heroPrimaryBtn);
+  heroFlameEngine = heroSmokeEngine;
 }
