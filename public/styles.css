@@ -440,7 +440,7 @@ body {
 
 .hero-flame-canvas {
   position: absolute;
-  bottom: -35px;
+  bottom: -10px;
   left: 50%;
   transform: translateX(-50%);
   pointer-events: none;

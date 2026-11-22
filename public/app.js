@@ -1038,60 +1038,64 @@ class OrbScanEngine {
 }
 
 // ============================================================================
-// SUPERNATURAL CRIMSON FLAME ENERGY ENGINE (INITIALISE SCANNER BUTTON)
-// Recreates organic flowing blood-red plasma ribbons, luminous crimson edges,
-// curling smoke-like wisps, and atmospheric radiance (media_1795379971766_51ffb21f)
+// REALISTIC FLOWING CRIMSON FIRE ENGINE (INITIALISE SCANNER BUTTON)
+// Inspired directly by reference media_1795381748191_031f8c33.jpg
+// Features:
+// - Broad, organic, flowing, translucent crimson flame bodies (NO wireframe spikes or grass outlines)
+// - Domain-warped fluid convection shader with velvety blood-red and crimson interiors
+// - Bright scarlet, ruby, and occasional white-hot luminous edge highlights
+// - Strictly bounded and compact footprint: hugs the button, licks ~25-35px above top edge
+//   without extending across the hero heading or description
+// - Hardware-accelerated WebGL with automatic 2D volumetric fire fallback
 // ============================================================================
 
 class HeroFlameEngine {
   constructor(canvas, button) {
     this.canvas = canvas;
-    this.ctx = canvas.getContext('2d');
     this.button = button;
     this.overviewView = document.getElementById('view-overview');
-    
-    this.intensity = 0.85;
-    this.targetIntensity = 0.85;
-    this.reach = 1.0;
-    this.targetReach = 1.0;
-    this.curlScale = 1.0;
-    this.targetCurlScale = 1.0;
-    this.speedMult = 1.0;
-    this.targetSpeedMult = 1.0;
-    
+
     this.time = 0;
     this.lastTimestamp = performance.now();
     this.running = false;
     this.animId = null;
-    
+
+    // Interaction states
+    this.intensity = 0.88;
+    this.targetIntensity = 0.88;
+    this.hover = 0.0;
+    this.targetHover = 0.0;
+    this.burst = 0.0;
     this.burstActive = false;
-    this.burstRings = [];
-    this.burstStreamers = [];
-    
-    this.motes = [];
-    this.ribbons = [];
-    
-    this.initCanvas();
-    this.initRibbons();
-    this.initMotes();
+
+    // Attempt WebGL first, fall back to 2D volumetric fire
+    this.isWebGL = this.initWebGL();
+    if (!this.isWebGL) {
+      this.init2D();
+    }
+
     this.bindEvents();
     this.start();
   }
 
-  initCanvas() {
+  initDimensions() {
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     this.dpr = dpr;
-    
+
     const bw = this.button.offsetWidth || 214;
     const bh = this.button.offsetHeight || 42;
-    
-    this.padX = 90;
-    this.padTop = 150;
-    this.padBottom = 35;
-    
+
+    // Compact, proportionate bounding:
+    // 28px padding on left/right flanks to wrap rounded corners
+    // 38px above button for compact flame lick (well clear of the paragraph and heading)
+    // 10px below button for subtle warm bottom rim glow
+    this.padX = 28;
+    this.padTop = 38;
+    this.padBottom = 10;
+
     this.width = bw + this.padX * 2;
     this.height = bh + this.padTop + this.padBottom;
-    
+
     this.canvas.width = Math.round(this.width * dpr);
     this.canvas.height = Math.round(this.height * dpr);
     this.canvas.style.width = `${this.width}px`;
@@ -1099,126 +1103,300 @@ class HeroFlameEngine {
     this.canvas.style.bottom = `-${this.padBottom}px`;
     this.canvas.style.left = '50%';
     this.canvas.style.transform = 'translateX(-50%)';
-    
-    this.btnX = this.padX;
-    this.btnY = this.padTop;
+
     this.btnW = bw;
     this.btnH = bh;
+    this.btnX = this.padX;
+    this.btnY = this.padTop; // From top in 2D
+    this.glBtnY = this.padBottom; // From bottom in WebGL
   }
 
-  initRibbons() {
-    this.ribbons = [];
+  initWebGL() {
+    this.initDimensions();
+    const gl = this.canvas.getContext('webgl', {
+      alpha: true,
+      premultipliedAlpha: false,
+      antialias: false,
+      depth: false
+    }) || this.canvas.getContext('experimental-webgl');
+
+    if (!gl) return false;
+    this.gl = gl;
+
+    const vsSource = `
+      attribute vec2 a_position;
+      void main() {
+        gl_Position = vec4(a_position, 0.0, 1.0);
+      }
+    `;
+
+    const fsSource = `
+      precision mediump float;
+      uniform vec2 u_resolution;
+      uniform float u_time;
+      uniform vec4 u_btn; // x, y, w, h in canvas pixels (origin bottom-left)
+      uniform float u_intensity;
+      uniform float u_hover;
+      uniform float u_burst;
+
+      vec3 mod289(vec3 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
+      vec2 mod289(vec2 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
+      vec3 permute(vec3 x) { return mod289(((x * 34.0) + 1.0) * x); }
+
+      float snoise(vec2 v) {
+        const vec4 C = vec4(0.211324865405187, 0.366025403784439, -0.577350269189626, 0.024390243902439);
+        vec2 i  = floor(v + dot(v, C.yy));
+        vec2 x0 = v - i + dot(i, C.xx);
+        vec2 i1 = (x0.x > x0.y) ? vec2(1.0, 0.0) : vec2(0.0, 1.0);
+        vec4 x12 = x0.xyxy + C.xxzz;
+        x12.xy -= i1;
+        i = mod289(i);
+        vec3 p = permute(permute(i.y + vec3(0.0, i1.y, 1.0)) + i.x + vec3(0.0, i1.x, 1.0));
+        vec3 m = max(0.5 - vec3(dot(x0, x0), dot(x12.xy, x12.xy), dot(x12.zw, x12.zw)), 0.0);
+        m = m * m;
+        m = m * m;
+        vec3 x = 2.0 * fract(p * C.www) - 1.0;
+        vec3 h = abs(x) - 0.5;
+        vec3 ox = floor(x + 0.5);
+        vec3 a0 = x - ox;
+        m *= 1.79284291400159 - 0.85373472095314 * (a0 * a0 + h * h);
+        vec3 g;
+        g.x  = a0.x  * x0.x  + h.x  * x0.y;
+        g.yz = a0.yz * x12.xz + h.yz * x12.yw;
+        return 130.0 * dot(m, g);
+      }
+
+      float fbm(vec2 p) {
+        float v = 0.0;
+        float a = 0.5;
+        mat2 rot = mat2(0.87758, 0.47942, -0.47942, 0.87758);
+        for (int i = 0; i < 4; ++i) {
+          v += a * snoise(p);
+          p = rot * p * 2.0 + vec2(10.0, 10.0);
+          a *= 0.5;
+        }
+        return v;
+      }
+
+      float flameTurbulence(vec2 p, float t) {
+        vec2 flow = vec2(0.0, -t * 1.6);
+        vec2 q = vec2(
+          fbm(p + flow * 0.7),
+          fbm(p + flow + vec2(4.1, 2.7))
+        );
+        vec2 r = vec2(
+          fbm(p + 2.2 * q + flow * 1.1 + vec2(1.7, 8.4)),
+          fbm(p + 2.2 * q + flow * 0.9 + vec2(8.3, 3.2))
+        );
+        return fbm(p + 2.0 * r + flow * 1.4);
+      }
+
+      void main() {
+        vec2 pixel = gl_FragCoord.xy;
+        vec2 uv = pixel / u_resolution;
+        
+        float btnLeft = u_btn.x / u_resolution.x;
+        float btnRight = (u_btn.x + u_btn.z) / u_resolution.x;
+        float btnBottom = u_btn.y / u_resolution.y;
+        float btnTop = (u_btn.y + u_btn.w) / u_resolution.y;
+        float btnCenterX = (btnLeft + btnRight) * 0.5;
+        float btnHalfW = (btnRight - btnLeft) * 0.5;
+        
+        // Horizontal envelope: tightly hugging button with soft flank feathering
+        float dx = abs(uv.x - btnCenterX) / btnHalfW;
+        float hEnvelope = smoothstep(1.30, 0.92, dx);
+        
+        // Vertical envelope:
+        float vDist = uv.y - btnTop;
+        float maxReach = (1.0 - btnTop);
+        
+        // Undulating tongues across top edge
+        float tongueMod = 1.0 + 0.35 * sin(uv.x * 24.0 + u_time * 1.8) 
+                              + 0.22 * cos(uv.x * 38.0 - u_time * 2.4);
+        float reachNorm = clamp(vDist / (maxReach * tongueMod), 0.0, 1.0);
+        
+        float vEnvelope = 0.0;
+        if (uv.y >= btnTop) {
+          vEnvelope = smoothstep(1.0, 0.0, pow(reachNorm, 0.82));
+        } else if (uv.y >= btnBottom) {
+          vEnvelope = 0.85 + 0.15 * smoothstep(btnBottom, btnTop, uv.y);
+        } else {
+          float bDist = (btnBottom - uv.y) / btnBottom;
+          vEnvelope = smoothstep(1.0, 0.0, bDist) * 0.6;
+        }
+        
+        float envelope = hEnvelope * vEnvelope;
+        if (envelope <= 0.005) {
+          gl_FragColor = vec4(0.0);
+          return;
+        }
+        
+        // Evaluate domain-warped fluid noise
+        vec2 noiseCoord = vec2(uv.x * 4.5, uv.y * 3.2);
+        float n = flameTurbulence(noiseCoord, u_time * (0.9 + 0.35 * u_hover));
+        
+        float density = (n * 0.5 + 0.5) * envelope * (u_intensity + 0.4 * u_hover);
+        
+        if (u_burst > 0.0) {
+          float bWave = sin(u_burst * 3.14159);
+          density += bWave * 0.45 * envelope;
+        }
+        
+        if (density < 0.03) {
+          gl_FragColor = vec4(0.0);
+          return;
+        }
+        
+        // EXACT COLOR PALETTE FROM REFERENCE IMAGE
+        vec3 colDarkWine = vec3(0.32, 0.02, 0.05);   // deep dark burgundy interior
+        vec3 colBloodRed = vec3(0.68, 0.06, 0.12);   // deep blood-red body
+        vec3 colCrimson  = vec3(0.95, 0.10, 0.18);   // vibrant burning crimson
+        vec3 colScarlet  = vec3(1.00, 0.22, 0.28);   // bright glowing scarlet
+        vec3 colCoral    = vec3(1.00, 0.58, 0.65);   // luminous coral-pink edge highlights
+        vec3 colWhiteHot = vec3(1.00, 0.94, 0.96);   // occasional white-hot crest
+        
+        vec3 finalColor = mix(colDarkWine, colBloodRed, smoothstep(0.06, 0.28, density));
+        finalColor = mix(finalColor, colCrimson, smoothstep(0.28, 0.54, density));
+        finalColor = mix(finalColor, colScarlet, smoothstep(0.54, 0.76, density));
+        finalColor = mix(finalColor, colCoral, smoothstep(0.76, 0.90, density));
+        finalColor = mix(finalColor, colWhiteHot, smoothstep(0.90, 1.08, density));
+        
+        float alpha = smoothstep(0.03, 0.35, density) * 0.88;
+        float outerGlow = smoothstep(0.01, 0.18, density) * (1.0 - smoothstep(0.18, 0.45, density)) * 0.35;
+        alpha = clamp(alpha + outerGlow, 0.0, 0.92);
+        
+        gl_FragColor = vec4(finalColor * alpha, alpha);
+      }
+    `;
+
+    function createShader(gl, type, source) {
+      const shader = gl.createShader(type);
+      gl.shaderSource(shader, source);
+      gl.compileShader(shader);
+      if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+        console.warn('Shader compile failed:', gl.getShaderInfoLog(shader));
+        gl.deleteShader(shader);
+        return null;
+      }
+      return shader;
+    }
+
+    const vs = createShader(gl, gl.VERTEX_SHADER, vsSource);
+    const fs = createShader(gl, gl.FRAGMENT_SHADER, fsSource);
+    if (!vs || !fs) return false;
+
+    const program = gl.createProgram();
+    gl.attachShader(program, vs);
+    gl.attachShader(program, fs);
+    gl.linkProgram(program);
+    if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+      console.warn('Program link failed:', gl.getProgramInfoLog(program));
+      return false;
+    }
+
+    this.program = program;
+    gl.useProgram(program);
+
+    // Full screen quad buffer
+    const positionBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+    gl.bufferData(
+      gl.ARRAY_BUFFER,
+      new Float32Array([-1, -1, 1, -1, -1, 1, -1, 1, 1, -1, 1, 1]),
+      gl.STATIC_DRAW
+    );
+
+    const posAttr = gl.getAttribLocation(program, 'a_position');
+    gl.enableVertexAttribArray(posAttr);
+    gl.vertexAttribPointer(posAttr, 2, gl.FLOAT, false, 0, 0);
+
+    // Uniform locations
+    this.uResolution = gl.getUniformLocation(program, 'u_resolution');
+    this.uTime = gl.getUniformLocation(program, 'u_time');
+    this.uBtn = gl.getUniformLocation(program, 'u_btn');
+    this.uIntensity = gl.getUniformLocation(program, 'u_intensity');
+    this.uHover = gl.getUniformLocation(program, 'u_hover');
+    this.uBurst = gl.getUniformLocation(program, 'u_burst');
+
+    gl.enable(gl.BLEND);
+    gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+
+    return true;
+  }
+
+  init2D() {
+    this.initDimensions();
+    this.ctx = this.canvas.getContext('2d');
     
-    // 1. Background broad translucent curtains (deep ruby/burgundy veils)
-    const backPositions = [0.08, 0.22, 0.38, 0.54, 0.70, 0.86, 0.94];
-    backPositions.forEach((pos, idx) => {
-      this.ribbons.push({
-        layer: 'back',
-        xRel: pos,
-        yOffset: 2 + (idx % 3),
-        baseHeight: 70 + (idx % 4) * 12,
-        widthBase: 4,
-        widthMid: 28 + (idx % 3) * 6,
-        widthTip: 2,
-        speed: 0.75 + (idx % 3) * 0.15,
-        phase: (idx * 1.3) % (Math.PI * 2),
-        freq1: 2.4 + idx * 0.3,
-        freq2: 4.2 + idx * 0.4,
-        freq3: 7.0,
-        amp1: 8 + (idx % 3) * 3,
-        amp2: 5 + (idx % 2) * 2,
-        curlDir: idx % 2 === 0 ? 1 : -1,
-        curlStart: 0.48,
-        curlStrength: 0.85,
-        hasWhiteHighlight: false
-      });
-    });
-
-    // 2. Midground primary plasma flame ribbons (vibrant crimson with luminous edges)
-    const midPositions = [
-      -0.03, 0.05, 0.12, 0.19, 0.27, 0.35, 0.43, 0.51,
-      0.59, 0.67, 0.75, 0.83, 0.91, 0.98, 1.04
-    ];
-    midPositions.forEach((pos, idx) => {
-      const isCorner = pos < 0.08 || pos > 0.92;
-      this.ribbons.push({
-        layer: 'mid',
-        xRel: pos,
-        yOffset: isCorner ? 4 : (idx % 2 === 0 ? 1 : 3),
-        baseHeight: isCorner ? (65 + (idx % 2) * 15) : (85 + (idx % 5) * 12),
-        widthBase: isCorner ? 2 : 3.5,
-        widthMid: isCorner ? 10 : (16 + (idx % 4) * 3),
-        widthTip: 1.5,
-        speed: 0.95 + (idx % 4) * 0.2,
-        phase: (idx * 0.9 + 0.4) % (Math.PI * 2),
-        freq1: 3.2 + (idx % 3) * 0.5,
-        freq2: 5.6 + (idx % 2) * 0.6,
-        freq3: 9.0 + (idx % 3),
-        amp1: isCorner ? 12 : (10 + (idx % 3) * 2),
-        amp2: isCorner ? 7 : (6 + (idx % 2) * 2),
-        curlDir: pos < 0.5 ? -1 : 1,
-        curlStart: 0.42 + (idx % 3) * 0.06,
-        curlStrength: 1.1 + (idx % 3) * 0.25,
-        hasWhiteHighlight: idx % 3 === 0
-      });
-    });
-
-    // 3. Foreground high-energy wisps & delicate curling smoke filaments
-    const forePositions = [
-      0.02, 0.11, 0.21, 0.30, 0.40, 0.49, 0.58, 0.68, 0.78, 0.88, 0.96
-    ];
-    forePositions.forEach((pos, idx) => {
-      this.ribbons.push({
-        layer: 'fore',
-        xRel: pos,
-        yOffset: idx % 2 === 0 ? 0 : 2,
-        baseHeight: 95 + (idx % 4) * 16,
-        widthBase: 2,
-        widthMid: 5 + (idx % 2) * 2,
-        widthTip: 1.0,
-        speed: 1.25 + (idx % 3) * 0.25,
-        phase: (idx * 1.7 + 1.1) % (Math.PI * 2),
-        freq1: 4.0 + (idx % 3) * 0.6,
-        freq2: 6.8 + (idx % 2) * 0.8,
-        freq3: 11.0,
-        amp1: 14 + (idx % 3) * 3,
-        amp2: 9 + (idx % 2) * 2,
-        curlDir: idx % 2 === 0 ? 1 : -1,
-        curlStart: 0.38 + (idx % 3) * 0.05,
-        curlStrength: 1.35 + (idx % 2) * 0.3,
-        hasWhiteHighlight: true
-      });
-    });
-  }
-
-  initMotes() {
-    this.motes = [];
-    for (let i = 0; i < 24; i++) {
-      this.motes.push({
-        x: this.btnX + Math.random() * this.btnW,
-        y: this.btnY - Math.random() * 85,
-        vy: 30 + Math.random() * 50,
-        size: 0.8 + Math.random() * 1.5,
-        life: Math.random(),
-        maxLife: 1.1 + Math.random() * 1.1,
-        phase: Math.random() * Math.PI * 2
+    // Broad, smooth volumetric flame plumes for 2D fallback
+    this.flames2D = [];
+    const count = 7;
+    for (let i = 0; i < count; i++) {
+      this.flames2D.push({
+        relX: 0.08 + (i / (count - 1)) * 0.84,
+        baseW: 32 + (i % 3) * 8,
+        height: 24 + (i % 4) * 6,
+        phase: (i * 1.2) % (Math.PI * 2),
+        speed: 1.2 + (i % 3) * 0.3
       });
     }
   }
 
+  draw2DFallback(dt) {
+    const ctx = this.ctx;
+    ctx.save();
+    ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+    ctx.clearRect(0, 0, this.width, this.height);
+
+    ctx.globalCompositeOperation = 'screen';
+    
+    // Warm atmospheric red halo behind button
+    const halo = ctx.createRadialGradient(
+      this.btnX + this.btnW / 2, this.btnY + 6, 8,
+      this.btnX + this.btnW / 2, this.btnY + 6, this.btnW / 2 + 25
+    );
+    halo.addColorStop(0.0, `rgba(220, 24, 40, ${0.35 * this.intensity})`);
+    halo.addColorStop(0.5, `rgba(160, 14, 28, ${0.15 * this.intensity})`);
+    halo.addColorStop(1.0, 'rgba(0, 0, 0, 0)');
+    ctx.fillStyle = halo;
+    ctx.fillRect(0, 0, this.width, this.height);
+
+    // Broad volumetric flame tongues (NO wireframe lines)
+    const t = this.time;
+    for (const f of this.flames2D) {
+      const cx = this.btnX + f.relX * this.btnW;
+      const cy = this.btnY;
+      const sway = Math.sin(t * f.speed + f.phase) * 6;
+      const h = f.height * (0.85 + 0.35 * this.hover);
+      const w = f.baseW * (0.9 + 0.2 * this.hover);
+
+      const grad = ctx.createLinearGradient(cx, cy, cx + sway, cy - h);
+      grad.addColorStop(0.0, `rgba(195, 18, 36, ${0.65 * this.intensity})`);
+      grad.addColorStop(0.4, `rgba(245, 28, 52, ${0.55 * this.intensity})`);
+      grad.addColorStop(0.8, `rgba(255, 65, 85, ${0.30 * this.intensity})`);
+      grad.addColorStop(1.0, 'rgba(120, 10, 22, 0)');
+
+      ctx.beginPath();
+      ctx.moveTo(cx - w / 2, cy + 4);
+      ctx.quadraticCurveTo(cx - w / 3, cy - h * 0.5, cx + sway, cy - h);
+      ctx.quadraticCurveTo(cx + w / 3, cy - h * 0.5, cx + w / 2, cy + 4);
+      ctx.closePath();
+      ctx.fillStyle = grad;
+      ctx.fill();
+    }
+
+    ctx.restore();
+  }
+
   bindEvents() {
     this.button.addEventListener('mouseenter', () => {
-      this.targetIntensity = 1.55;
-      this.targetReach = 1.38;
-      this.targetCurlScale = 1.45;
-      this.targetSpeedMult = 1.45;
+      this.targetHover = 1.0;
+      this.targetIntensity = 1.25;
     });
 
     this.button.addEventListener('mouseleave', () => {
-      this.targetIntensity = 0.85;
-      this.targetReach = 1.0;
-      this.targetCurlScale = 1.0;
-      this.targetSpeedMult = 1.0;
+      this.targetHover = 0.0;
+      this.targetIntensity = 0.88;
     });
 
     this.button.addEventListener('mousedown', () => {
@@ -1226,437 +1404,75 @@ class HeroFlameEngine {
     });
 
     window.addEventListener('resize', () => {
-      this.initCanvas();
+      this.initDimensions();
     });
   }
 
   triggerClickBurst() {
     this.burstActive = true;
-    this.intensity = 2.4;
-    this.reach = 1.45;
-    this.curlScale = 1.8;
-
-    this.burstRings = [
-      { r: 6, maxR: this.btnW * 0.75, speed: 420, delay: 0.0, width: 2.8 },
-      { r: 0, maxR: this.btnW * 0.62, speed: 320, delay: 0.05, width: 2.2 },
-      { r: 0, maxR: this.btnW * 0.50, speed: 240, delay: 0.11, width: 1.6 }
-    ];
-
-    this.burstStreamers = [];
-    const count = 18;
-    for (let i = 0; i < count; i++) {
-      const angle = -Math.PI * 0.95 + (i / (count - 1)) * Math.PI * 0.9;
-      const speed = 150 + Math.random() * 180;
-      this.burstStreamers.push({
-        x: this.btnX + (0.05 + (i / (count - 1)) * 0.9) * this.btnW,
-        y: this.btnY,
-        vx: Math.cos(angle) * speed,
-        vy: Math.sin(angle) * speed,
-        history: [],
-        life: 0,
-        maxLife: 0.32 + Math.random() * 0.22,
-        size: 1.5 + Math.random() * 1.6
-      });
-    }
+    this.burst = 0.01;
+    this.intensity = 1.6;
   }
 
-  evaluateRibbon(r, t, intensity, reach, curlScale) {
-    const numSteps = 30;
-    const points = [];
-    
-    const originX = this.btnX + r.xRel * this.btnW;
-    const originY = this.btnY + r.yOffset;
-    const totalH = r.baseHeight * reach;
-    
-    for (let i = 0; i <= numSteps; i++) {
-      const s = i / numSteps;
-      const cy = originY - s * totalH;
-      
-      const w1 = Math.sin(t * r.speed * 1.5 + s * r.freq1 + r.phase);
-      const w2 = Math.cos(t * r.speed * 2.7 - s * r.freq2 + r.phase * 1.3);
-      const w3 = Math.sin(t * 4.0 + s * r.freq3);
-      
-      let dx = w1 * (r.amp1 * Math.pow(s, 1.22)) +
-               w2 * (r.amp2 * Math.pow(s, 1.55)) +
-               w3 * (2.2 * s * s);
-      let dy = 0;
-      
-      if (s > r.curlStart) {
-        const u = (s - r.curlStart) / (1 - r.curlStart);
-        const curlAngle = r.curlDir * (Math.pow(u, 1.32) * Math.PI * 2.1 + Math.sin(t * 1.3 + r.phase) * 0.45);
-        const curlRadius = r.curlStrength * curlScale * Math.pow(u, 1.45) * (15 + intensity * 8);
-        dx += curlRadius * (1 - Math.cos(curlAngle));
-        dy += curlRadius * Math.sin(curlAngle) * 0.62;
-      }
-      
-      points.push({ x: originX + dx, y: cy + dy, s });
-    }
-    
-    const ribbonData = [];
-    for (let i = 0; i <= numSteps; i++) {
-      const pt = points[i];
-      let tx, ty;
-      if (i === 0) {
-        tx = points[1].x - points[0].x;
-        ty = points[1].y - points[0].y;
-      } else if (i === numSteps) {
-        tx = points[numSteps].x - points[numSteps - 1].x;
-        ty = points[numSteps].y - points[numSteps - 1].y;
-      } else {
-        tx = points[i + 1].x - points[i - 1].x;
-        ty = points[i + 1].y - points[i - 1].y;
-      }
-      
-      const len = Math.hypot(tx, ty) || 1;
-      const nx = -ty / len;
-      const ny = tx / len;
-      
-      const s = pt.s;
-      const midWeight = 4 * s * Math.pow(1 - s, 1.2);
-      let w = r.widthBase * (1 - s) + r.widthMid * midWeight + r.widthTip * s;
-      w *= 0.88 + 0.25 * Math.sin(t * 2.1 + s * 5.5 + r.phase);
-      w *= (0.8 + 0.35 * intensity);
-      
-      const halfW = w / 2;
-      ribbonData.push({
-        cx: pt.x,
-        cy: pt.y,
-        lx: pt.x + nx * halfW,
-        ly: pt.y + ny * halfW,
-        rx: pt.x - nx * halfW,
-        ry: pt.y - ny * halfW,
-        s,
-        w
-      });
-    }
-    
-    return ribbonData;
-  }
+  renderWebGL(dt) {
+    const gl = this.gl;
+    const cw = Math.round(this.width * this.dpr);
+    const ch = Math.round(this.height * this.dpr);
 
-  drawAtmosphericGlow(ctx, intensity) {
-    const centerX = this.btnX + this.btnW / 2;
-    const centerY = this.btnY + 4;
-    const radius = (this.btnW / 2 + 55) * (0.85 + 0.3 * intensity);
-    
-    const halo = ctx.createRadialGradient(centerX, centerY, 8, centerX, centerY, radius);
-    halo.addColorStop(0.0, `rgba(220, 24, 40, ${0.22 * intensity})`);
-    halo.addColorStop(0.4, `rgba(160, 14, 28, ${0.11 * intensity})`);
-    halo.addColorStop(0.75, `rgba(80, 6, 14, ${0.035 * intensity})`);
-    halo.addColorStop(1.0, 'rgba(0, 0, 0, 0)');
-    
-    ctx.save();
-    ctx.fillStyle = halo;
-    ctx.fillRect(0, 0, this.width, this.height);
-    
-    const edgeLine = ctx.createLinearGradient(this.btnX, this.btnY, this.btnX + this.btnW, this.btnY);
-    edgeLine.addColorStop(0.0, 'rgba(255, 30, 50, 0)');
-    edgeLine.addColorStop(0.12, `rgba(255, 45, 65, ${0.5 * intensity})`);
-    edgeLine.addColorStop(0.5, `rgba(255, 115, 135, ${0.85 * intensity})`);
-    edgeLine.addColorStop(0.88, `rgba(255, 45, 65, ${0.5 * intensity})`);
-    edgeLine.addColorStop(1.0, 'rgba(255, 30, 50, 0)');
-    
-    ctx.strokeStyle = edgeLine;
-    ctx.lineWidth = 1.4;
-    ctx.beginPath();
-    ctx.moveTo(this.btnX + 6, this.btnY);
-    ctx.lineTo(this.btnX + this.btnW - 6, this.btnY);
-    ctx.stroke();
-    ctx.restore();
-  }
+    gl.viewport(0, 0, cw, ch);
+    gl.clearColor(0.0, 0.0, 0.0, 0.0);
+    gl.clear(gl.COLOR_BUFFER_BIT);
 
-  drawRibbonVeil(ctx, data, r, intensity) {
-    if (data.length < 2) return;
-    const start = data[0];
-    const end = data[data.length - 1];
-    
-    const grad = ctx.createLinearGradient(start.cx, start.cy, end.cx, end.cy);
-    if (r.layer === 'back') {
-      grad.addColorStop(0.0, `rgba(105, 10, 18, ${0.42 * intensity})`);
-      grad.addColorStop(0.32, `rgba(165, 16, 32, ${0.32 * intensity})`);
-      grad.addColorStop(0.72, `rgba(110, 8, 20, ${0.15 * intensity})`);
-      grad.addColorStop(1.0, 'rgba(40, 3, 8, 0)');
-    } else {
-      grad.addColorStop(0.0, `rgba(195, 18, 36, ${0.62 * intensity})`);
-      grad.addColorStop(0.34, `rgba(245, 28, 52, ${0.48 * intensity})`);
-      grad.addColorStop(0.74, `rgba(255, 45, 75, ${0.25 * intensity})`);
-      grad.addColorStop(1.0, 'rgba(110, 8, 22, 0)');
-    }
-    
-    ctx.beginPath();
-    ctx.moveTo(data[0].lx, data[0].ly);
-    for (let i = 1; i < data.length; i++) {
-      const xc = (data[i - 1].lx + data[i].lx) / 2;
-      const yc = (data[i - 1].ly + data[i].ly) / 2;
-      ctx.quadraticCurveTo(data[i - 1].lx, data[i - 1].ly, xc, yc);
-    }
-    ctx.lineTo(end.rx, end.ry);
-    for (let i = data.length - 1; i >= 1; i--) {
-      const xc = (data[i].rx + data[i - 1].rx) / 2;
-      const yc = (data[i].ry + data[i - 1].ry) / 2;
-      ctx.quadraticCurveTo(data[i].rx, data[i].ry, xc, yc);
-    }
-    ctx.closePath();
-    ctx.fillStyle = grad;
-    ctx.fill();
-  }
+    gl.useProgram(this.program);
 
-  drawRibbonEdges(ctx, data, r, intensity) {
-    if (data.length < 2) return;
-    const start = data[0];
-    const end = data[data.length - 1];
-    
-    const edgeGrad = ctx.createLinearGradient(start.cx, start.cy, end.cx, end.cy);
-    const baseAlpha = (r.layer === 'mid' ? 0.85 : 0.45) * Math.min(intensity, 1.5);
-    
-    edgeGrad.addColorStop(0.0, `rgba(215, 24, 44, ${0.55 * baseAlpha})`);
-    edgeGrad.addColorStop(0.32, `rgba(255, 48, 72, ${0.95 * baseAlpha})`);
-    edgeGrad.addColorStop(0.68, `rgba(255, 120, 142, ${0.92 * baseAlpha})`);
-    edgeGrad.addColorStop(0.88, `rgba(255, 195, 205, ${0.75 * baseAlpha})`);
-    edgeGrad.addColorStop(1.0, 'rgba(255, 50, 70, 0)');
-    
-    ctx.save();
-    ctx.strokeStyle = edgeGrad;
-    ctx.lineWidth = r.layer === 'mid' ? 1.5 : 1.1;
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
-    
-    // Left boundary edge
-    ctx.beginPath();
-    ctx.moveTo(data[0].lx, data[0].ly);
-    for (let i = 1; i < data.length; i++) {
-      const xc = (data[i - 1].lx + data[i].lx) / 2;
-      const yc = (data[i - 1].ly + data[i].ly) / 2;
-      ctx.quadraticCurveTo(data[i - 1].lx, data[i - 1].ly, xc, yc);
-    }
-    ctx.stroke();
-    
-    // Right boundary edge
-    ctx.beginPath();
-    ctx.moveTo(data[0].rx, data[0].ry);
-    for (let i = 1; i < data.length; i++) {
-      const xc = (data[i - 1].rx + data[i].rx) / 2;
-      const yc = (data[i - 1].ry + data[i].ry) / 2;
-      ctx.quadraticCurveTo(data[i - 1].rx, data[i - 1].ry, xc, yc);
-    }
-    ctx.stroke();
-    
-    // Hot-white crest highlight filament
-    if ((r.hasWhiteHighlight || intensity > 1.25) && r.layer === 'mid') {
-      const highlightGrad = ctx.createLinearGradient(start.cx, start.cy, end.cx, end.cy);
-      highlightGrad.addColorStop(0.0, 'rgba(255, 255, 255, 0)');
-      highlightGrad.addColorStop(0.48, 'rgba(255, 230, 235, 0.85)');
-      highlightGrad.addColorStop(0.72, 'rgba(255, 250, 250, 0.95)');
-      highlightGrad.addColorStop(0.90, 'rgba(255, 180, 195, 0.35)');
-      highlightGrad.addColorStop(1.0, 'rgba(255, 255, 255, 0)');
-      
-      ctx.strokeStyle = highlightGrad;
-      ctx.lineWidth = 1.0;
-      ctx.beginPath();
-      const midIdx = Math.floor(data.length * 0.35);
-      ctx.moveTo(data[midIdx].cx, data[midIdx].cy);
-      for (let i = midIdx + 1; i < data.length - 2; i++) {
-        const xc = (data[i - 1].cx + data[i].cx) / 2;
-        const yc = (data[i - 1].cy + data[i].cy) / 2;
-        ctx.quadraticCurveTo(data[i - 1].cx, data[i - 1].cy, xc, yc);
-      }
-      ctx.stroke();
-    }
-    
-    ctx.restore();
-  }
+    gl.uniform2f(this.uResolution, cw, ch);
+    gl.uniform1f(this.uTime, this.time);
+    gl.uniform4f(
+      this.uBtn,
+      this.btnX * this.dpr,
+      this.glBtnY * this.dpr,
+      this.btnW * this.dpr,
+      this.btnH * this.dpr
+    );
+    gl.uniform1f(this.uIntensity, this.intensity);
+    gl.uniform1f(this.uHover, this.hover);
+    gl.uniform1f(this.uBurst, this.burst);
 
-  drawForeWisp(ctx, data, r, intensity) {
-    if (data.length < 2) return;
-    const start = data[0];
-    const end = data[data.length - 1];
-    
-    const wispGrad = ctx.createLinearGradient(start.cx, start.cy, end.cx, end.cy);
-    const alpha = Math.min(intensity * 0.92, 1.0);
-    
-    wispGrad.addColorStop(0.0, `rgba(220, 25, 45, ${0.4 * alpha})`);
-    wispGrad.addColorStop(0.28, `rgba(255, 40, 65, ${0.9 * alpha})`);
-    wispGrad.addColorStop(0.65, `rgba(255, 105, 130, ${0.95 * alpha})`);
-    wispGrad.addColorStop(0.85, `rgba(255, 215, 225, ${0.85 * alpha})`);
-    wispGrad.addColorStop(1.0, 'rgba(255, 60, 80, 0)');
-    
-    ctx.save();
-    ctx.strokeStyle = wispGrad;
-    ctx.lineWidth = Math.max(1.0, 1.7 + (intensity - 1.0) * 0.45);
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
-    
-    ctx.beginPath();
-    ctx.moveTo(data[0].cx, data[0].cy);
-    for (let i = 1; i < data.length; i++) {
-      const xc = (data[i - 1].cx + data[i].cx) / 2;
-      const yc = (data[i - 1].cy + data[i].cy) / 2;
-      ctx.quadraticCurveTo(data[i - 1].cx, data[i - 1].cy, xc, yc);
-    }
-    ctx.stroke();
-    ctx.restore();
-  }
-
-  updateAndDrawMotes(ctx, dt, intensity) {
-    ctx.save();
-    for (const m of this.motes) {
-      m.life += dt / m.maxLife;
-      if (m.life >= 1.0) {
-        m.life = 0;
-        m.x = this.btnX + (0.08 + Math.random() * 0.84) * this.btnW;
-        m.y = this.btnY - Math.random() * 10;
-        m.vy = (30 + Math.random() * 50) * (0.8 + 0.3 * intensity);
-        m.size = 0.8 + Math.random() * 1.5;
-      }
-      
-      m.y -= m.vy * dt;
-      m.x += Math.sin(this.time * 2.3 + m.phase) * 16 * dt;
-      
-      const alpha = Math.sin(m.life * Math.PI) * 0.75 * intensity;
-      if (alpha <= 0.01) continue;
-      
-      ctx.beginPath();
-      ctx.arc(m.x, m.y, m.size, 0, Math.PI * 2);
-      ctx.fillStyle = m.size > 1.6 ? `rgba(255, 215, 225, ${alpha})` : `rgba(255, 45, 70, ${alpha})`;
-      ctx.shadowColor = '#ff1744';
-      ctx.shadowBlur = 6;
-      ctx.fill();
-    }
-    ctx.restore();
-  }
-
-  renderBurst(ctx, dt) {
-    if (!this.burstActive) return;
-    
-    const centerX = this.btnX + this.btnW / 2;
-    const centerY = this.btnY + this.btnH / 2;
-    
-    ctx.save();
-    ctx.globalCompositeOperation = 'lighter';
-    
-    let anyRingAlive = false;
-    for (const ring of this.burstRings) {
-      if (ring.delay > 0) {
-        ring.delay -= dt;
-        anyRingAlive = true;
-        continue;
-      }
-      ring.r += ring.speed * dt;
-      const progress = ring.r / ring.maxR;
-      if (progress < 1.0) {
-        anyRingAlive = true;
-        const alpha = (1 - progress) * 0.88;
-        ctx.beginPath();
-        ctx.ellipse(centerX, centerY - 8, ring.r, ring.r * 0.44, 0, 0, Math.PI * 2);
-        ctx.strokeStyle = `rgba(255, 45, 70, ${alpha})`;
-        ctx.lineWidth = ring.width * (1 - progress * 0.5);
-        ctx.shadowColor = '#ff2a3b';
-        ctx.shadowBlur = 10;
-        ctx.stroke();
-      }
-    }
-    
-    let anyStreamerAlive = false;
-    for (const s of this.burstStreamers) {
-      s.life += dt / s.maxLife;
-      if (s.life < 1.0) {
-        anyStreamerAlive = true;
-        s.history.push({ x: s.x, y: s.y });
-        if (s.history.length > 8) s.history.shift();
-        
-        s.x += s.vx * dt;
-        s.y += s.vy * dt;
-        s.vy -= 110 * dt;
-        
-        const alpha = (1 - s.life) * 0.95;
-        if (s.history.length >= 2) {
-          ctx.beginPath();
-          ctx.moveTo(s.history[0].x, s.history[0].y);
-          for (let i = 1; i < s.history.length; i++) {
-            ctx.lineTo(s.history[i].x, s.history[i].y);
-          }
-          ctx.strokeStyle = `rgba(255, 215, 230, ${alpha})`;
-          ctx.lineWidth = s.size * (1 - s.life * 0.7);
-          ctx.shadowColor = '#ff1744';
-          ctx.shadowBlur = 8;
-          ctx.stroke();
-        }
-      }
-    }
-    
-    ctx.restore();
-    
-    if (!anyRingAlive && !anyStreamerAlive) {
-      this.burstActive = false;
-    }
-  }
-
-  draw(dt) {
-    const ctx = this.ctx;
-    ctx.save();
-    ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
-    ctx.clearRect(0, 0, this.width, this.height);
-    
-    // 1. Soft atmospheric radiance
-    this.drawAtmosphericGlow(ctx, this.intensity);
-    
-    // 2. Additive plasma ribbons
-    ctx.globalCompositeOperation = 'screen';
-    
-    // Layer A: Background broad veils
-    for (const r of this.ribbons) {
-      if (r.layer === 'back') {
-        const data = this.evaluateRibbon(r, this.time, this.intensity, this.reach, this.curlScale);
-        this.drawRibbonVeil(ctx, data, r, this.intensity);
-      }
-    }
-    
-    // Layer B: Midground crimson flame ribbons with glowing edges
-    for (const r of this.ribbons) {
-      if (r.layer === 'mid') {
-        const data = this.evaluateRibbon(r, this.time, this.intensity, this.reach, this.curlScale);
-        this.drawRibbonVeil(ctx, data, r, this.intensity);
-        this.drawRibbonEdges(ctx, data, r, this.intensity);
-      }
-    }
-    
-    // Layer C: Foreground thin smoke wisps & curling tendrils
-    for (const r of this.ribbons) {
-      if (r.layer === 'fore') {
-        const data = this.evaluateRibbon(r, this.time, this.intensity, this.reach, this.curlScale);
-        this.drawForeWisp(ctx, data, r, this.intensity);
-      }
-    }
-    
-    // 3. Smoke motes / sparks
-    this.updateAndDrawMotes(ctx, dt, this.intensity);
-    
-    // 4. Click burst (if triggered)
-    if (this.burstActive) {
-      this.renderBurst(ctx, dt);
-    }
-    
-    ctx.restore();
+    gl.drawArrays(gl.TRIANGLES, 0, 6);
   }
 
   tick(now) {
     if (!this.running) return;
-    
+
     if (this.overviewView && !this.overviewView.classList.contains('active')) {
       this.animId = requestAnimationFrame(t => this.tick(t));
       return;
     }
-    
+
     const dt = Math.min((now - this.lastTimestamp) / 1000, 0.08);
     this.lastTimestamp = now;
-    this.time += dt * this.speedMult;
-    
-    const lerpFactor = 1 - Math.exp(-dt * 7.5);
+    this.time += dt;
+
+    // Smooth lerp to target states
+    const lerpFactor = 1 - Math.exp(-dt * 6.5);
     this.intensity += (this.targetIntensity - this.intensity) * lerpFactor;
-    this.reach += (this.targetReach - this.reach) * lerpFactor;
-    this.curlScale += (this.targetCurlScale - this.curlScale) * lerpFactor;
-    this.speedMult += (this.targetSpeedMult - this.speedMult) * lerpFactor;
-    
-    this.draw(dt);
+    this.hover += (this.targetHover - this.hover) * lerpFactor;
+
+    // Click burst decay
+    if (this.burstActive) {
+      this.burst += dt / 0.35;
+      if (this.burst >= 1.0) {
+        this.burst = 0.0;
+        this.burstActive = false;
+      }
+    }
+
+    if (this.isWebGL) {
+      this.renderWebGL(dt);
+    } else {
+      this.draw2DFallback(dt);
+    }
+
     this.animId = requestAnimationFrame(t => this.tick(t));
   }
 
