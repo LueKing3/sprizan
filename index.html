@@ -10,6 +10,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,400;0,500;1,400&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="./styles.css" />
+  <link rel="stylesheet" href="./dragon-layer.css" />
 </head>
 <body>
   <!-- Ambient lighting orbs and animated background tech grid -->
@@ -196,11 +197,15 @@
               </div>
             </div>
 
-            <!-- Background Dragon Silhouette & Ambient Crimson Atmosphere -->
-            <div class="scan-dragon-backdrop" aria-hidden="true">
-              <img src="./sprizan-dragon.png" alt="" class="scan-dragon-silhouette" />
-              <div class="scan-dragon-eye"></div>
-              <div class="scan-dragon-smoke"></div>
+            <!-- Coiled Dragon Guardian Layer & Continuous Neck Smoke (Image 2 Target) -->
+            <div class="dragon-layer" id="dragon-layer" aria-hidden="true">
+              <div class="dragon-artwork-wrapper">
+                <img src="./dragon.png" alt="" class="dragon-artwork" />
+                <div class="dragon-eye-glow"></div>
+                <div class="dragon-smoke-container">
+                  <canvas class="dragon-smoke-canvas" id="dragon-smoke-canvas"></canvas>
+                </div>
+              </div>
             </div>
 
             <!-- The Central 3D Scanning Orb Chamber -->
@@ -337,5 +342,6 @@
 
   <div id="toast" class="toast" role="status"></div>
   <script src="./app.js" defer></script>
+  <script src="./dragon-layer.js" defer></script>
 </body>
 </html>
