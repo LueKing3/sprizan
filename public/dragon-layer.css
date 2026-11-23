@@ -1,164 +1,177 @@
 /**
- * SPRIZAN — Coiled Dragon Guardian Layer & Continuous Volumetric Neck Smoke
- * Visual Target: Image 2 Reference Composition
- * ADDITIVE ONLY — Orb, rings, character stream, laser, timeline, and HUD are 100% unaltered.
+ * SPRIZAN — Dragon Guardian Layer v2: Alive & Breathing
+ * Tunables, alignment, sizing, smoke, embers, debug overlay.
+ * ADDITIVE ONLY — orb, rings, tiles, timeline, HUD are 100% unaltered.
  */
 
 :root {
-  /* Dragon & Smoke Tunables */
+  /* ── Dragon Tunables ── */
   --dragon-scale: 1.0;
   --dragon-x: 0px;
   --dragon-y: 0px;
   --dragon-opacity: 1.0;
-  --neck-x: 43%;
-  --neck-y: 24%;
-  --eye-x: 53.4%;
-  --eye-y: 17.8%;
-  --smoke-opacity: 0.85;
+  --dragon-warp: 0.016;
+  --dragon-pulse: 0.20;
+  --eye-x: 53.6%;
+  --eye-y: 17.9%;
+  --neck-x: 33.3%;
+  --neck-y: 20.1%;
+  --smoke-opacity: 0.88;
   --smoke-speed: 1.0;
   --smoke-scale: 1.0;
-  --smoke-height: 1.0;
-
-  /* Orb Diameter reference: matches .scan-orb-wrapper diameter */
-  --orb-d: 440px;
+  --haze-opacity: 0.12;
+  --ember-count: 60;
 }
 
-@media (max-width: 768px) {
-  :root {
-    --orb-d: 290px;
-    --dragon-scale: 0.96;
-  }
-}
-
-/* Master container for the dragon guardian */
+/* ── Master dragon container: spans entire theater so smoke/embers cover left & right ── */
 .dragon-layer {
   position: absolute;
-  left: 50%;
-  top: 230px; /* Fallback before dynamic JS alignment with orb center */
-  transform: translate(-50%, -50%);
-  width: 0;
-  height: 0;
+  inset: 0;
+  width: 100%;
+  height: 100%;
   pointer-events: none;
   user-select: none;
-  z-index: 2; /* Sits behind .scan-orb-wrapper (z-index: 5) and above pedestal glow */
+  z-index: 2; /* Sits behind .scan-orb-wrapper (z-index: 5) and HUD (z-index: 15) */
   opacity: 0;
   transition: opacity 600ms cubic-bezier(0.16, 1, 0.3, 1);
-  overflow: visible;
+  overflow: hidden;
 }
 
-/* Fade in smoothly over 600ms when the scan stage is active */
 #scan-stage:not(.hidden) .dragon-layer,
 .scan-stage:not(.hidden) .dragon-layer,
 .dragon-layer.is-visible {
   opacity: var(--dragon-opacity, 1.0);
 }
 
-/* Artwork wrapper dimensioned relative to orb diameter D (2.2D wide x 1.64D tall) */
-.dragon-artwork-wrapper {
+/* ── Dragon artwork canvas (WebGL texture + warp + flicker) ── */
+.dragon-art-canvas {
   position: absolute;
-  left: 0;
-  top: 0;
-  width: calc(var(--orb-d) * 2.2 * var(--dragon-scale, 1.0));
-  height: calc(var(--orb-d) * 2.2 * (896 / 1200) * var(--dragon-scale, 1.0));
-  /* Circular void center in dragon.png is at exactly 52.01% X, 46.21% Y */
-  transform-origin: 52.01% 46.21%;
-  transform: translate(calc(-52.01% + var(--dragon-x, 0px)), calc(-46.21% + var(--dragon-y, 0px)));
-  pointer-events: none;
-  animation: dragon-breathe 7s ease-in-out infinite alternate;
-  will-change: transform;
-}
-
-/* Very slow, subtle organic breathing animation centered on orb */
-@keyframes dragon-breathe {
-  0% {
-    transform: translate(calc(-52.01% + var(--dragon-x, 0px)), calc(-46.21% + var(--dragon-y, 0px))) scale(1);
-  }
-  100% {
-    transform: translate(calc(-52.01% + var(--dragon-x, 0px)), calc(-46.21% + var(--dragon-y, 0px))) scale(1.012);
-  }
-}
-
-/* Dragon artwork image with screen blending and soft edge feathering */
-.dragon-artwork {
-  width: 100%;
-  height: 100%;
-  object-fit: fill;
   display: block;
   mix-blend-mode: screen;
   pointer-events: none;
-  /* Radial feather mask so all borders dissolve seamlessly into black */
-  -webkit-mask-image: radial-gradient(ellipse 49% 47% at 52% 46%, black 50%, rgba(0, 0, 0, 0.85) 74%, transparent 98%);
-  mask-image: radial-gradient(ellipse 49% 47% at 52% 46%, black 50%, rgba(0, 0, 0, 0.85) 74%, transparent 98%);
+  will-change: transform;
 }
 
-/* Luminous eye pulse positioned precisely on dragon's eye */
+/* ── Fallback static image (no WebGL) ── */
+.dragon-artwork-fallback {
+  position: absolute;
+  display: block;
+  mix-blend-mode: screen;
+  pointer-events: none;
+  animation: dragon-fb-breathe 6s ease-in-out infinite alternate,
+             dragon-fb-pulse 4s ease-in-out infinite alternate;
+}
+
+@keyframes dragon-fb-breathe {
+  from { transform: scale(1); }
+  to   { transform: scale(1.025); }
+}
+@keyframes dragon-fb-pulse {
+  from { filter: brightness(0.95); }
+  to   { filter: brightness(1.12); }
+}
+
+/* ── Smoke canvas: spans full theater so plumes fill left & right ── */
+.dragon-smoke-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  mix-blend-mode: screen;
+  pointer-events: none;
+  z-index: 2;
+}
+
+/* ── Ember particle canvas: spans full theater ── */
+.dragon-ember-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  mix-blend-mode: screen;
+  pointer-events: none;
+  z-index: 3;
+}
+
+/* ── Luminous eye glow (CSS element positioned by JS on dragon's eye) ── */
 .dragon-eye-glow {
   position: absolute;
-  left: var(--eye-x, 53.4%);
-  top: var(--eye-y, 17.8%);
   width: 14px;
   height: 14px;
   transform: translate(-50%, -50%);
   border-radius: 50%;
   background: radial-gradient(circle, #fffaf0 0%, #ff8c69 28%, #ff2a3b 65%, transparent 80%);
-  box-shadow: 0 0 12px 3px rgba(255, 60, 40, 0.75);
+  box-shadow: 0 0 14px 4px rgba(255, 60, 40, 0.85);
   mix-blend-mode: screen;
   pointer-events: none;
-  animation: dragon-eye-pulse 3.5s ease-in-out infinite alternate;
+  z-index: 4;
+  animation: dragon-eye-pulse 3.2s ease-in-out infinite alternate;
 }
 
 @keyframes dragon-eye-pulse {
   0% {
-    opacity: 0.65;
+    opacity: 0.7;
     transform: translate(-50%, -50%) scale(0.9);
   }
   50% {
     opacity: 1.0;
-    transform: translate(-50%, -50%) scale(1.18);
-    box-shadow: 0 0 16px 5px rgba(255, 80, 50, 0.9);
+    transform: translate(-50%, -50%) scale(1.22);
+    box-shadow: 0 0 18px 6px rgba(255, 90, 60, 0.95);
   }
   100% {
-    opacity: 0.75;
-    transform: translate(-50%, -50%) scale(0.95);
+    opacity: 0.8;
+    transform: translate(-50%, -50%) scale(0.96);
   }
 }
 
-/* Continuous Volumetric Neck Smoke Container */
-.dragon-smoke-container {
-  position: absolute;
-  left: var(--neck-x, 43%);
-  top: var(--neck-y, 24%);
-  width: calc(var(--orb-d) * 1.15 * var(--smoke-scale, 1.0));
-  height: calc(var(--orb-d) * 1.15 * var(--smoke-scale, 1.0) * var(--smoke-height, 1.0));
-  transform: translate(-50%, -50%);
-  pointer-events: none;
-  mix-blend-mode: screen;
-  opacity: var(--smoke-opacity, 0.85);
-  z-index: 3;
-}
-
-.dragon-smoke-canvas {
-  width: 100%;
-  height: 100%;
-  display: block;
-  pointer-events: none;
-  mix-blend-mode: screen;
-}
-
-/* Non-WebGL fallback */
-.dragon-smoke-fallback {
+/* ── Debug mode overlay (?fxdebug=1) ── */
+.dragon-debug-overlay {
   position: absolute;
   inset: 0;
-  border-radius: 50%;
-  background: radial-gradient(circle at 50% 65%, rgba(255, 42, 59, 0.35) 0%, rgba(176, 18, 18, 0.2) 42%, transparent 70%);
-  filter: blur(22px);
-  mix-blend-mode: screen;
   pointer-events: none;
+  z-index: 9999;
+}
+.dragon-debug-dot {
+  position: absolute;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  font-family: monospace;
+  font-size: 10px;
+  line-height: 1;
+  white-space: nowrap;
+}
+.dragon-debug-dot.orb-center {
+  width: 24px;
+  height: 24px;
+  border: 2px solid #00f0ff;
+  box-shadow: 0 0 8px #00f0ff;
+}
+.dragon-debug-dot.art-center {
+  width: 20px;
+  height: 20px;
+  border: 2px solid #ff00ea;
+  box-shadow: 0 0 8px #ff00ea;
+}
+.dragon-debug-dot.eye-dot {
+  width: 10px;
+  height: 10px;
+  background: #ffee00;
+  box-shadow: 0 0 6px #ffee00;
+}
+.dragon-debug-dot.emitter-dot {
+  width: 12px;
+  height: 12px;
+  border: 2px dashed #00ff88;
+  box-shadow: 0 0 6px #00ff88;
 }
 
-/* Accessibility: respect prefers-reduced-motion */
+/* ── Accessibility: reduced motion ── */
 @media (prefers-reduced-motion: reduce) {
-  .dragon-artwork-wrapper,
+  .dragon-art-canvas,
+  .dragon-artwork-fallback,
   .dragon-eye-glow {
     animation: none !important;
   }
