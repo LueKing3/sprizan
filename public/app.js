@@ -7,6 +7,7 @@ let health = { configured: {} };
 let toastTimer;
 let heroFlameEngine = null;
 let heroSmokeEngine = null;
+let activeScanEngine = null;
 
 function loadRecords() {
   try {
@@ -92,6 +93,13 @@ function showView(name) {
       heroFlameEngine.resume();
     } else {
       heroFlameEngine.pause();
+    }
+  }
+  if (activeScanEngine) {
+    if (name === 'scanner') {
+      activeScanEngine.resume();
+    } else {
+      activeScanEngine.pause();
     }
   }
 }
@@ -507,6 +515,8 @@ class OrbScanEngine {
     this.running = false;
     this.animId = null;
     this.laserAngle = 0;
+    this.isCompleted = false;
+    this.completedData = null;
 
     // Accessibility check: smooth reduced motion adaptation
     this.reducedMotion = typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -577,6 +587,13 @@ class OrbScanEngine {
     this.running = true;
     let lastTime = performance.now();
 
+    if (!this.isCompleted) {
+      const titleEl = document.querySelector('.orb-scanning-title');
+      if (titleEl) titleEl.textContent = 'SCANNING...';
+      const badgeLabel = document.querySelector('.target-badge-label');
+      if (badgeLabel) badgeLabel.textContent = 'TARGET INGESTION:';
+    }
+
     const loop = (now) => {
       if (!this.running) return;
       const dt = Math.min((now - lastTime) / 1000, 0.1);
@@ -599,6 +616,40 @@ class OrbScanEngine {
     }
     if (this.ctx) {
       this.ctx.clearRect(0, 0, this.width, this.height);
+    }
+  }
+
+  pause() {
+    this.running = false;
+    if (this.animId) {
+      cancelAnimationFrame(this.animId);
+      this.animId = null;
+    }
+  }
+
+  resume() {
+    if (this.running) return;
+    this.start();
+  }
+
+  setCompleted(data) {
+    this.isCompleted = true;
+    this.completedData = data;
+    const titleEl = document.querySelector('.orb-scanning-title');
+    if (titleEl) {
+      titleEl.textContent = 'ANALYSIS COMPLETE';
+    }
+    const badgeLabel = document.querySelector('.target-badge-label');
+    if (badgeLabel) {
+      badgeLabel.textContent = 'ANALYZED TARGET:';
+    }
+  }
+
+  setStandby() {
+    this.isCompleted = true;
+    const titleEl = document.querySelector('.orb-scanning-title');
+    if (titleEl) {
+      titleEl.textContent = 'STANDBY';
     }
   }
 
@@ -648,22 +699,24 @@ class OrbScanEngine {
       }
     }
 
-    // 2. Continuously append new characters at the left to sustain uninterrupted stream
-    while (minX > -this.charSpacing) {
-      const newX = (minX === Infinity ? 0 : minX) - this.charSpacing;
-      const char = this.fullStreamChars[this.streamCursor];
-      this.streamCursor = (this.streamCursor + 1) % this.fullStreamChars.length;
+    // 2. Continuously append new characters at the left to sustain uninterrupted stream while scanning
+    if (!this.isCompleted) {
+      while (minX > -this.charSpacing) {
+        const newX = (minX === Infinity ? 0 : minX) - this.charSpacing;
+        const char = this.fullStreamChars[this.streamCursor];
+        this.streamCursor = (this.streamCursor + 1) % this.fullStreamChars.length;
 
-      this.characters.unshift({
-        char,
-        x: newX,
-        y: this.baselineY,
-        scanGlow: 0,
-        opacity: 0,
-        scale: 1.0,
-        magFactor: 0
-      });
-      minX = newX;
+        this.characters.unshift({
+          char,
+          x: newX,
+          y: this.baselineY,
+          scanGlow: 0,
+          opacity: 0,
+          scale: 1.0,
+          magFactor: 0
+        });
+        minX = newX;
+      }
     }
 
     // 3. Subtle background ambient embers
@@ -2020,7 +2073,6 @@ function renderResult(data) {
 }
 
 let isScanning = false;
-let activeScanEngine = null;
 let activeTimelineController = null;
 
 /**
@@ -2208,13 +2260,10 @@ async function scan() {
     // Brief graceful completion pause (~350ms) to admire complete timeline
     await new Promise(r => setTimeout(r, 350));
 
-    // Stop canvas animation cleanly
+    // Transition the scanning orb to completed / standby state (preserves orb mounted and visible)
     if (activeScanEngine) {
-      activeScanEngine.stop();
-      activeScanEngine = null;
+      activeScanEngine.setCompleted(data);
     }
-
-    $('#scan-stage').classList.add('hidden');
 
     renderResult(data);
     records.unshift(data);
@@ -2231,10 +2280,8 @@ async function scan() {
   } catch (error) {
     clearInterval(stageInterval);
     if (activeScanEngine) {
-      activeScanEngine.stop();
-      activeScanEngine = null;
+      activeScanEngine.setStandby();
     }
-    $('#scan-stage').classList.add('hidden');
     globalAudioEngine.stopScan();
     toast(error.message || 'Unable to complete scan.', 'danger');
   } finally {
